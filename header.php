@@ -45,7 +45,7 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         .ss-cart{ position:relative; }
         .ss-badge{ position:absolute; top:-9px; right:-9px; background:#2d7a3e; color:#fff; font-size:0.65rem; min-width:18px; height:18px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-weight:700; }
         
-        /* Hamburger & Mobile Menu */
+
         .hamburger{ display:none; background:none; border:none; font-size:1.5rem; cursor:pointer; color:#1a1a1a; }
         .mobile-menu{
             display:none; position:fixed; top:112px; left:0; width:100%; height:calc(100vh - 112px);
@@ -56,7 +56,7 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         .mobile-menu a{ display:block; padding:14px 0; border-bottom:1px solid #eee; color:#1a1a1a; text-decoration:none; font-weight:600; font-size:1rem; }
         .mobile-menu a i{ width:24px; }
 
-        /* MOBILE RESPONSIVE */
+       
         @media(max-width:900px){
             body{ padding-top:68px; }
             .top-glass{ display:none; }
@@ -105,7 +105,7 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         </div>
     </div>
 
-    <!-- Mobile Drawer -->
+ 
     <div class="mobile-menu" id="mobileMenu">
         <a href="products.php?cat=fruits"><i class="fas fa-apple-alt"></i> Fruits</a>
         <a href="products.php?cat=vegetables"><i class="fas fa-carrot"></i> Veggies</a>
@@ -126,7 +126,7 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
     </div>
 
     <script>
-        // close mobile menu when clicking outside
+      
         document.addEventListener('click', function(e){
             const menu = document.getElementById('mobileMenu');
             const burger = document.querySelector('.hamburger');
