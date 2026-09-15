@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
-session_start();
+if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 include 'header.php';
 $is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']);
@@ -25,8 +25,6 @@ body{
 .suki-card{ background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.06); border-radius:16px; padding:16px 10px; text-align:center; backdrop-filter:blur(6px); transition:transform 0.2s; }
 .suki-card:hover{ transform:translateY(-4px); }
 .suki-card img{ width:100%; max-width:120px; height:120px; object-fit:contain; display:block; margin:0 auto; }
-
-/* Tablet & Desktop */
 @media(min-width:600px){
     .suki-grid{ grid-template-columns:repeat(3, 1fr); gap:16px; }
 }
@@ -60,7 +58,6 @@ body{
             try {
                 $sql = "SELECT id, name, image_url FROM products WHERE LOWER(name) NOT LIKE '%fish%' AND LOWER(name) NOT LIKE '%meat%' AND LOWER(name) NOT LIKE '%pork%' AND LOWER(name) NOT LIKE '%beef%' AND LOWER(name) NOT LIKE '%chicken%' ORDER BY id DESC LIMIT 6";
                 $result = $conn->query($sql);
-                
                 $products = [];
                 if ($result) {
                     if (method_exists($result, 'fetch_assoc')) {
@@ -69,12 +66,10 @@ body{
                         $products = $result->fetchAll(PDO::FETCH_ASSOC);
                     }
                 }
-
                 if(count($products) > 0){
                     foreach($products as $row){
                         $img = $row['image_url'] ?? '';
                         $name = $row['name'] ?? 'Product';
-                        // pag null or empty yung image, placeholder agad
                         $img_src = !empty($img) ? htmlspecialchars($img, ENT_QUOTES, 'UTF-8') : 'https://via.placeholder.com/120?text=Gulay';
                         echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.$img_src.'" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p></div>';
                     }
@@ -84,7 +79,6 @@ body{
             } catch(Exception $e){
                 echo '<p style="grid-column:1/-1; text-align:center; color:red;">Error: '.htmlspecialchars($e->getMessage()).'</p>';
             }
-
             if (isset($conn)) {
                 if (method_exists($conn, 'close')) { $conn->close(); } 
                 else { $conn = null; }
