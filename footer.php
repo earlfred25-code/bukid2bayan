@@ -70,11 +70,11 @@
     margin:0;
 }
 
-/* Tablet */
+
 @media(min-width:600px){
     .footer-main{ grid-template-columns:1fr 1fr; gap:30px 40px; }
 }
-/* Desktop */
+
 @media(min-width:1024px){
     .footer-main{ grid-template-columns:1.5fr 1fr 1fr 1fr; }
 }
