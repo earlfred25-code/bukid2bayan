@@ -1,14 +1,11 @@
 <?php
-// This MUST be the very first line
-session_start();
-
-// Unset all of the session variables (clears the session data)
+if (session_status() == PHP_SESSION_NONE) { session_start(); }
 $_SESSION = array();
-
-// Destroy the session completely
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', time() - 42000, $params["path"], $params["domain"], $params["secure"], $params["httponly"]);
+}
 session_destroy();
-
-// Redirect the user back to the homepage
 header("Location: index.php");
 exit();
 ?>
