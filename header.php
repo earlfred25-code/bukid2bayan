@@ -1,5 +1,7 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
+$current_page = strtolower(basename($_SERVER['PHP_SELF'] ?? ''));
+$hide_categories = in_array($current_page, ['login.php','register.php']);
 $cart_count = 0;
 if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     foreach ($_SESSION['cart'] as $k => $v) {
@@ -44,8 +46,6 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         .login-pill{ background:#111; color:#fff !important; padding:6px 16px; border-radius:20px; }
         .ss-cart{ position:relative; }
         .ss-badge{ position:absolute; top:-9px; right:-9px; background:#2d7a3e; color:#fff; font-size:0.65rem; min-width:18px; height:18px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-weight:700; }
-        
-
         .hamburger{ display:none; background:none; border:none; font-size:1.5rem; cursor:pointer; color:#1a1a1a; }
         .mobile-menu{
             display:none; position:fixed; top:112px; left:0; width:100%; height:calc(100vh - 112px);
@@ -55,8 +55,6 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         .mobile-menu.active{ display:block; }
         .mobile-menu a{ display:block; padding:14px 0; border-bottom:1px solid #eee; color:#1a1a1a; text-decoration:none; font-weight:600; font-size:1rem; }
         .mobile-menu a i{ width:24px; }
-
-       
         @media(max-width:900px){
             body{ padding-top:68px; }
             .top-glass{ display:none; }
@@ -78,55 +76,57 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
                     <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling" style="font-size:0.75rem;"></i> Sell on BUKID2BAYAN</a>
                 </div>
                 <div style="display:flex; gap:18px; align-items:center;">
-                    <?php if($is_logged): ?><a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a><?php endif; ?>
+                    <?php if($is_logged){ ?><a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a><?php } ?>
                     <a href="<?php echo $is_logged ? 'notifications.php' : 'login.php'; ?>"><i class="fas fa-bell"></i> Notifications</a>
                     <a href="help.php">Help</a>
-                    <?php if ($is_logged): ?>
+                    <?php if ($is_logged) { ?>
                         <span style="font-weight:600; color:#111;">Hi, <?php echo htmlspecialchars($_SESSION['user_name'] ?? 'Farmer'); ?></span><a href="logout.php">Logout</a>
-                    <?php else: ?>
+                    <?php } else { ?>
                         <a href="register.php">Sign Up</a><a href="login.php" class="login-pill">Login</a>
-                    <?php endif; ?>
+                    <?php } ?>
                 </div>
             </div>
         </div>
         <div class="ss-header-inner">
             <a href="index.php" class="ss-logo">BUKID<br>2BAYAN<br><span>FROM BUKID TO BAYAN</span></a>
+            <?php if(!$hide_categories){ ?>
             <nav class="ss-nav">
                 <a href="products.php?cat=fruits">Fruits</a>
                 <a href="products.php?cat=vegetables">Veggies</a>
                 <a href="products.php?cat=essentials">Essentials</a>
             </nav>
+            <?php } else { ?>
+            <nav class="ss-nav"></nav>
+            <?php } ?>
             <div class="ss-right">
                 <a href="products.php" class="hide-mobile"><i class="fas fa-search" style="font-size:1rem;"></i></a>
                 <a href="<?php echo $is_logged ? 'farmer_centre.php' : 'login.php'; ?>" class="hide-mobile"><i class="far fa-user"></i> Account</a>
-                <a href="<?php echo $cart_link; ?>" class="ss-cart"><i class="fas fa-shopping-cart"></i> <span class="hide-mobile">Cart</span> <?php if ($is_logged && $cart_count > 0): ?><span class="ss-badge"><?php echo $cart_count; ?></span><?php endif; ?></a>
+                <a href="<?php echo $cart_link; ?>" class="ss-cart"><i class="fas fa-shopping-cart"></i> <span class="hide-mobile">Cart</span> <?php if ($is_logged && $cart_count > 0){ ?><span class="ss-badge"><?php echo $cart_count; ?></span><?php } ?></a>
                 <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')"><i class="fas fa-bars"></i></button>
             </div>
         </div>
     </div>
-
- 
     <div class="mobile-menu" id="mobileMenu">
+        <?php if(!$hide_categories){ ?>
         <a href="products.php?cat=fruits"><i class="fas fa-apple-alt"></i> Fruits</a>
         <a href="products.php?cat=vegetables"><i class="fas fa-carrot"></i> Veggies</a>
         <a href="products.php?cat=essentials"><i class="fas fa-box"></i> Essentials</a>
         <a href="products.php"><i class="fas fa-search"></i> Search Products</a>
+        <?php } ?>
         <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Centre</a>
         <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
         <a href="<?php echo $cart_link; ?>"><i class="fas fa-shopping-cart"></i> Cart (<?php echo $cart_count; ?>)</a>
-        <?php if($is_logged): ?>
+        <?php if($is_logged){ ?>
         <a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a>
         <a href="notifications.php"><i class="fas fa-bell"></i> Notifications</a>
         <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-        <?php else: ?>
+        <?php } else { ?>
         <a href="login.php"><i class="fas fa-sign-in-alt"></i> Login</a>
         <a href="register.php"><i class="fas fa-user-plus"></i> Sign Up</a>
-        <?php endif; ?>
+        <?php } ?>
         <a href="help.php"><i class="fas fa-question-circle"></i> Help</a>
     </div>
-
     <script>
-      
         document.addEventListener('click', function(e){
             const menu = document.getElementById('mobileMenu');
             const burger = document.querySelector('.hamburger');
@@ -135,5 +135,4 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
             }
         });
     </script>
-
     <main>
