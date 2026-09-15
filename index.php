@@ -1,4 +1,5 @@
 <?php
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 session_start();
 include 'db_connect.php';
 include 'header.php';
@@ -51,7 +52,6 @@ body{
 <div class="suki-section">
     <div style="max-width:1280px; margin:0 auto; padding:0 16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:10px;">
-            <div style="flex:1; display:none;"></div>
             <h2 style="font-weight:800; letter-spacing:2px; color:#234723; margin:0; font-size:clamp(1.1rem, 3vw, 1.5rem); text-align:center; width:100%;">SUKI PICKS FOR 2026!</h2>
             <div style="width:100%; text-align:center; margin-top:8px;"><a href="products.php" style="color:#234723; text-decoration:none; font-weight:700; background:#e8f5e9; padding:6px 14px; border-radius:20px;">See All →</a></div>
         </div>
@@ -63,28 +63,28 @@ body{
                 
                 $products = [];
                 if ($result) {
-                    // Support both MySQLi and PDO
                     if (method_exists($result, 'fetch_assoc')) {
-                        // MySQLi
                         while($r = $result->fetch_assoc()){ $products[] = $r; }
                     } else {
-                        // PDO
                         $products = $result->fetchAll(PDO::FETCH_ASSOC);
                     }
                 }
 
                 if(count($products) > 0){
                     foreach($products as $row){
-                        echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.htmlspecialchars($row['image_url']).'" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($row['name']).'</p></div>';
+                        $img = $row['image_url'] ?? '';
+                        $name = $row['name'] ?? 'Product';
+                        // pag null or empty yung image, placeholder agad
+                        $img_src = !empty($img) ? htmlspecialchars($img, ENT_QUOTES, 'UTF-8') : 'https://via.placeholder.com/120?text=Gulay';
+                        echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.$img_src.'" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p></div>';
                     }
                 } else {
                     echo '<p style="grid-column:1/-1; text-align:center; color:#666;">Wala pang products. Add ka muna sa Supabase!</p>';
                 }
             } catch(Exception $e){
-                echo '<p style="grid-column:1/-1; text-align:center; color:red;">Error: '.$e->getMessage().'</p>';
+                echo '<p style="grid-column:1/-1; text-align:center; color:red;">Error: '.htmlspecialchars($e->getMessage()).'</p>';
             }
 
-            // Safe close for both MySQLi and PDO
             if (isset($conn)) {
                 if (method_exists($conn, 'close')) { $conn->close(); } 
                 else { $conn = null; }
