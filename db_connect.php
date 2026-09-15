@@ -1,5 +1,5 @@
 <?php
-// BUKID2BAYAN - Supabase + Vercel Final
+
 $host = getenv('DB_HOST') ?: "aws-0-ap-southeast-1.pooler.supabase.com";
 $port = getenv('DB_PORT') ?: "6543";
 $dbname = getenv('DB_NAME') ?: "postgres";
