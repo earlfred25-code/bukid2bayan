@@ -1,5 +1,6 @@
 <?php
-session_start();
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
+if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 
 if (!isset($_SESSION['cart'])) {
@@ -21,12 +22,29 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
     $action = $_POST['action'];
     $input_qty = max(1, (int)($_POST['quantity'] ?? 1));
 
-    $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
-    $stmt->bind_param("i", $product_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $product_name = $res->num_rows > 0 ? $res->fetch_assoc()['name'] : null;
-    $stmt->close();
+    // GET PRODUCT NAME - support PDO & MySQLi
+    $product_name = null;
+    try {
+        if ($conn instanceof PDO) {
+            // PDO version (Supabase)
+            $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
+            $stmt->execute([$product_id]);
+            $product_name = $stmt->fetchColumn();
+        } else {
+            // MySQLi version
+            $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
+            $stmt->bind_param("i", $product_id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            if ($res && $res->num_rows > 0) {
+                $row = $res->fetch_assoc();
+                $product_name = $row['name'] ?? null;
+            }
+            $stmt->close();
+        }
+    } catch(Exception $e){
+        $product_name = null;
+    }
 
     if (!$product_name) {
         $_SESSION['flash']['error'] = "Product not found.";
@@ -36,7 +54,9 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
 
     if ($action == 'add') {
         if (isset($_SESSION['cart'][$product_id])) {
-            $_SESSION['cart'][$product_id]['quantity'] += $input_qty;
+            $current = $_SESSION['cart'][$product_id];
+            $currentQty = is_array($current) ? ($current['quantity'] ?? 1) : (int)$current;
+            $_SESSION['cart'][$product_id] = array('quantity' => $currentQty + $input_qty);
         } else {
             $_SESSION['cart'][$product_id] = array('quantity' => $input_qty);
         }
@@ -51,7 +71,9 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
 
     if ($action == 'buy_now') {
         if (isset($_SESSION['cart'][$product_id])) {
-            $_SESSION['cart'][$product_id]['quantity'] += $input_qty;
+            $current = $_SESSION['cart'][$product_id];
+            $currentQty = is_array($current) ? ($current['quantity'] ?? 1) : (int)$current;
+            $_SESSION['cart'][$product_id] = array('quantity' => $currentQty + $input_qty);
         } else {
             $_SESSION['cart'][$product_id] = array('quantity' => $input_qty);
         }
@@ -78,7 +100,14 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
     }
 }
 
-$conn->close();
+// Safe close for both PDO & MySQLi
+if (isset($conn)) {
+    if ($conn instanceof PDO) {
+        $conn = null;
+    } elseif (method_exists($conn, 'close')) {
+        $conn->close();
+    }
+}
+
 header('Location: ' . $redirect_to);
 exit();
-?>
