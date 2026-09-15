@@ -22,16 +22,16 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
     $action = $_POST['action'];
     $input_qty = max(1, (int)($_POST['quantity'] ?? 1));
 
-    // GET PRODUCT NAME - support PDO & MySQLi
+
     $product_name = null;
     try {
         if ($conn instanceof PDO) {
-            // PDO version (Supabase)
+         
             $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
             $stmt->execute([$product_id]);
             $product_name = $stmt->fetchColumn();
         } else {
-            // MySQLi version
+     
             $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
             $stmt->bind_param("i", $product_id);
             $stmt->execute();
@@ -100,7 +100,7 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
     }
 }
 
-// Safe close for both PDO & MySQLi
+
 if (isset($conn)) {
     if ($conn instanceof PDO) {
         $conn = null;
