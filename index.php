@@ -68,9 +68,13 @@ body{
                 }
                 if(count($products) > 0){
                     foreach($products as $row){
-                        $img = $row['image_url'] ?? '';
+                        $img = trim($row['image_url'] ?? '');
                         $name = $row['name'] ?? 'Product';
-                        $img_src = !empty($img) ? htmlspecialchars($img, ENT_QUOTES, 'UTF-8') : 'https://via.placeholder.com/120?text=Gulay';
+                        if (empty($img)) {
+                            $img_src = 'https://via.placeholder.com/120?text=Gulay';
+                        } else {
+                            $img_src = htmlspecialchars(str_replace(' ', '%20', $img), ENT_QUOTES, 'UTF-8');
+                        }
                         echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.$img_src.'" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p></div>';
                     }
                 } else {
