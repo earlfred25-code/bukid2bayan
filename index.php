@@ -70,10 +70,20 @@ body{
                     foreach($products as $row){
                         $img = trim($row['image_url'] ?? '');
                         $name = $row['name'] ?? 'Product';
-                        if (empty($img)) {
+                        if ($img === '') {
                             $img_src = 'https://via.placeholder.com/120?text=Gulay';
                         } else {
-                            $img_src = htmlspecialchars(str_replace(' ', '%20', $img), ENT_QUOTES, 'UTF-8');
+                            if (strpos($img, 'http') === 0) {
+                                $img_src = $img;
+                            } else {
+                                $img = ltrim($img, './');
+                                if (strpos($img, 'images/') === 0) {
+                                    $img_src = '/' . $img;
+                                } else {
+                                    $img_src = '/images/' . basename($img);
+                                }
+                            }
+                            $img_src = htmlspecialchars($img_src, ENT_QUOTES, 'UTF-8');
                         }
                         echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.$img_src.'" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p></div>';
                     }
