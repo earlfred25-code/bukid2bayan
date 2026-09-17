@@ -7,33 +7,18 @@ $is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_
 $shop_link = $is_logged ? 'products.php' : 'login.php';
 ?>
 <style>
-body{ 
-    background:url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1920') no-repeat center fixed;
-    background-size:cover; 
-}
+body{ background:url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1920') no-repeat center fixed; background-size:cover; }
 .hero-palengke{ position:relative; width:100%; height:100vh; min-height:600px; display:grid; grid-template-columns:1fr 1fr 1fr; overflow:hidden; }
 .hero-palengke > div{ background-size:cover; background-position:center; opacity:0.78; }
-.hero-overlay{ 
-    position:absolute; inset:0; 
-    background:linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.25) 100%);
-    display:flex; flex-direction:column; align-items:center; justify-content:center; 
-    text-align:center; color:#fff; padding:20px; padding-top:100px;
-}
+.hero-overlay{ position:absolute; inset:0; background:linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.25) 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:#fff; padding:20px; padding-top:100px; }
 .hero-overlay h1{ font-size:clamp(1.8rem, 5vw, 2.9rem); font-weight:900; margin:0; line-height:1.15; text-shadow:0 4px 20px rgba(0,0,0,0.4); }
 .suki-section{ background:rgba(255,255,255,0.92); backdrop-filter:blur(12px); position:relative; z-index:5; padding:40px 0 60px 0; border-radius:24px 24px 0 0; margin-top:-30px; box-shadow:0 -10px 40px rgba(0,0,0,0.1); }
 .suki-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
-.suki-card{ background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.06); border-radius:16px; padding:16px 10px; text-align:center; backdrop-filter:blur(6px); transition:transform 0.2s; }
-.suki-card:hover{ transform:translateY(-4px); }
-.suki-card img{ width:100%; max-width:120px; height:120px; object-fit:contain; display:block; margin:0 auto; }
-@media(min-width:600px){
-    .suki-grid{ grid-template-columns:repeat(3, 1fr); gap:16px; }
-}
-@media(min-width:1024px){
-    .suki-grid{ grid-template-columns:repeat(6, 1fr); gap:20px; }
-}
-@media(max-width:768px){
-    .hero-palengke{ height:70vh; min-height:500px; }
-}
+.suki-card{ background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.06); border-radius:16px; padding:16px 10px; text-align:center; backdrop-filter:blur(6px); }
+.suki-card img{ width:100%; max-width:120px; height:120px; object-fit:contain; display:block; margin:0 auto; background:#f1f8e9; }
+@media(min-width:600px){ .suki-grid{ grid-template-columns:repeat(3, 1fr); gap:16px; } }
+@media(min-width:1024px){ .suki-grid{ grid-template-columns:repeat(6, 1fr); gap:20px; } }
+@media(max-width:768px){ .hero-palengke{ height:70vh; min-height:500px; } }
 </style>
 
 <section class="hero-palengke">
@@ -71,24 +56,21 @@ body{
                         $img = trim($row['image_url'] ?? '');
                         $name = $row['name'] ?? 'Product';
                         if ($img === '') {
-                            $img_src = 'https://via.placeholder.com/120?text=Gulay';
+                            $img_src = '/images/placeholder.jpg';
                         } else {
                             if (strpos($img, 'http') === 0) {
                                 $img_src = $img;
                             } else {
-                                $img = ltrim($img, './');
-                                if (strpos($img, 'images/') === 0) {
-                                    $img_src = '/' . $img;
-                                } else {
-                                    $img_src = '/images/' . basename($img);
-                                }
+                                $base = basename($img);
+                                $img_src = '/images/' . $base;
                             }
-                            $img_src = htmlspecialchars($img_src, ENT_QUOTES, 'UTF-8');
                         }
-                        echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.$img_src.'" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p></div>';
+                        $safe_src = htmlspecialchars($img_src, ENT_QUOTES, 'UTF-8');
+                        $safe_name = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+                        echo '<div class="suki-card"><img src="'.$safe_src.'" loading="lazy" style="background:#f1f8e9"><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.$safe_name.'</p><small style="font-size:10px; color:#999; word-break:break-all;">'.$safe_src.'</small></div>';
                     }
                 } else {
-                    echo '<p style="grid-column:1/-1; text-align:center; color:#666;">Wala pang products. Add ka muna sa Supabase!</p>';
+                    echo '<p style="grid-column:1/-1; text-align:center; color:#666;">Wala pang products.</p>';
                 }
             } catch(Exception $e){
                 echo '<p style="grid-column:1/-1; text-align:center; color:red;">Error: '.htmlspecialchars($e->getMessage()).'</p>';
