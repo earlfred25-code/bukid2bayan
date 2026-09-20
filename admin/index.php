@@ -20,56 +20,56 @@ try {
 } catch(Exception $e){}
 ?>
 <div class="admin-wrap">
-    <div style="margin-bottom:24px;">
-        <h1 style="margin:0; font-size:2rem; font-weight:900; letter-spacing:-1px;"><i class="fas fa-seedling" style="color:#2a9d8f;"></i> Bukid2Bayan</h1>
-        <p style="margin:6px 0 0 0; color:#666;">Admin Overview - Lahat ng galaw ng buyers at farmers</p>
+    <div class="page-title-block">
+        <h1 class="main-title"><i class="fas fa-seedling icon-green"></i> Bukid2Bayan</h1>
+        <p class="sub-title">Admin Overview - Lahat ng galaw ng buyers at farmers</p>
     </div>
     <div class="stats">
         <div class="stat">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="stat-flex">
                 <div>
-                    <div style="color:#666; font-size:0.8rem; font-weight:700; text-transform:uppercase;">Total Users</div>
-                    <div style="font-size:2.2rem; font-weight:900; margin-top:4px;"><?php echo $total_users; ?></div>
-                    <div style="font-size:0.75rem; color:#888; margin-top:4px;"><?php echo $total_farmers; ?> Farmers / <?php echo $total_buyers; ?> Buyers</div>
+                    <div class="stat-label">Total Users</div>
+                    <div class="stat-value"><?php echo $total_users; ?></div>
+                    <div class="stat-small"><?php echo $total_farmers; ?> Farmers / <?php echo $total_buyers; ?> Buyers</div>
                 </div>
-                <div style="width:48px; height:48px; background:#e6f7f4; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#2a9d8f; font-size:1.4rem;"><i class="fas fa-users"></i></div>
+                <div class="stat-icon icon-bg-green"><i class="fas fa-users"></i></div>
             </div>
         </div>
-        <div class="stat">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="stat stat-blue">
+            <div class="stat-flex">
                 <div>
-                    <div style="color:#666; font-size:0.8rem; font-weight:700; text-transform:uppercase;">Total Products</div>
-                    <div style="font-size:2.2rem; font-weight:900; margin-top:4px;"><?php echo $total_products; ?></div>
-                    <div style="font-size:0.75rem; color:#888; margin-top:4px;">Gulay, Bigas, Itlog</div>
+                    <div class="stat-label">Total Products</div>
+                    <div class="stat-value"><?php echo $total_products; ?></div>
+                    <div class="stat-small">Gulay, Bigas, Itlog</div>
                 </div>
-                <div style="width:48px; height:48px; background:#dbeafe; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#3b82f6; font-size:1.4rem;"><i class="fas fa-box-open"></i></div>
+                <div class="stat-icon icon-bg-blue"><i class="fas fa-box-open"></i></div>
             </div>
         </div>
-        <div class="stat">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="stat stat-yellow">
+            <div class="stat-flex">
                 <div>
-                    <div style="color:#666; font-size:0.8rem; font-weight:700; text-transform:uppercase;">Pending Orders</div>
-                    <div style="font-size:2.2rem; font-weight:900; margin-top:4px;"><?php echo $total_orders; ?></div>
-                    <div style="font-size:0.75rem; color:#888; margin-top:4px;">From buyers</div>
+                    <div class="stat-label">Pending Orders</div>
+                    <div class="stat-value"><?php echo $total_orders; ?></div>
+                    <div class="stat-small">From buyers</div>
                 </div>
-                <div style="width:48px; height:48px; background:#fef3c7; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#f59e0b; font-size:1.4rem;"><i class="fas fa-shopping-basket"></i></div>
+                <div class="stat-icon icon-bg-yellow"><i class="fas fa-shopping-basket"></i></div>
             </div>
         </div>
-        <div class="stat">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="stat stat-green">
+            <div class="stat-flex">
                 <div>
-                    <div style="color:#666; font-size:0.8rem; font-weight:700; text-transform:uppercase;">System Status</div>
-                    <div style="font-size:1.3rem; font-weight:900; margin-top:8px; color:#16a34a;"><i class="fas fa-circle" style="font-size:0.6rem;"></i> Online</div>
-                    <div style="font-size:0.75rem; color:#888; margin-top:4px;">Vercel + Supabase</div>
+                    <div class="stat-label">System Status</div>
+                    <div class="stat-value status-online"><i class="fas fa-circle dot"></i> Online</div>
+                    <div class="stat-small">Vercel + Supabase</div>
                 </div>
-                <div style="width:48px; height:48px; background:#dcfce7; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#16a34a; font-size:1.4rem;"><i class="fas fa-server"></i></div>
+                <div class="stat-icon icon-bg-light-green"><i class="fas fa-server"></i></div>
             </div>
         </div>
     </div>
     <div class="quick">
-        <a href="manage_products.php"><i class="fas fa-pen-to-square"></i><br>Manage Products</a>
-        <a href="../farmer_dashboard.php"><i class="fas fa-plus"></i><br>Add Product as Admin</a>
-        <a href="../index.php"><i class="fas fa-store"></i><br>View Shop</a>
+        <a href="manage_products.php" class="quick-black"><i class="fas fa-pen-to-square"></i><br>Manage Products</a>
+        <a href="../farmer_dashboard.php" class="quick-green"><i class="fas fa-plus"></i><br>Add Product as Admin</a>
+        <a href="../index.php" class="quick-white"><i class="fas fa-store"></i><br>View Shop</a>
     </div>
 </div>
 </main>
