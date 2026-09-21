@@ -11,6 +11,40 @@ if (isset($_SESSION['user_id'])) {
 include 'db_connect.php';
 $error_message = "";
 $is_pdo = $conn instanceof PDO;
+
+// function para mag-send ng bagong OTP pag mag-login yung hindi pa verified
+function resendOTPForLogin($conn, $user, $is_pdo){
+    $otp = rand(100000,999999);
+    $expires = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+    try{
+        if($is_pdo){
+            $conn->prepare("UPDATE users SET verification_code=?, verification_expires=? WHERE id=?")->execute([$otp,$expires,$user['id']]);
+        } else {
+            $stmt=$conn->prepare("UPDATE users SET verification_code=?, verification_expires=? WHERE id=?");
+            $stmt->bind_param("ssi",$otp,$expires,$user['id']); $stmt->execute();
+        }
+        // send email kung may config ka na
+        if(file_exists(__DIR__.'/email_config.php')){
+            $config = include __DIR__.'/email_config.php';
+            if(file_exists(__DIR__.'/vendor/autoload.php')){
+                require __DIR__.'/vendor/autoload.php';
+                try{
+                    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+                    $mail->isSMTP(); $mail->Host=$config['host']; $mail->SMTPAuth=true;
+                    $mail->Username=$config['username']; $mail->Password=$config['password'];
+                    $mail->SMTPSecure='tls'; $mail->Port=$config['port'];
+                    $mail->setFrom($config['from_email'],$config['from_name']);
+                    $mail->addAddress($user['email'],$user['username']);
+                    $mail->isHTML(true);
+                    $mail->Subject='Bukid2Bayan - Your Login Code: '.$otp;
+                    $mail->Body="<div style='font-family:Arial;padding:20px'><h2 style='color:#2a9d8f'>Bukid2Bayan</h2><p>Your new verification code is:</p><h1 style='letter-spacing:5px;background:#f5f7f4;padding:12px;border-radius:10px;text-align:center'>$otp</h1><p>Valid for 10 mins.</p></div>";
+                    $mail->send();
+                }catch(Exception $e){}
+            }
+        }
+    }catch(Exception $e){}
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
@@ -20,16 +54,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         try {
             if($is_pdo){
                 try {
-                    $stmt = $conn->prepare("SELECT id, username, password, is_admin, role FROM users WHERE email = ? LIMIT 1");
+                    $stmt = $conn->prepare("SELECT id, username, password, email, is_admin, role, is_verified, verification_code, verification_expires FROM users WHERE email = ? LIMIT 1");
                     $stmt->execute([$email]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
                 } catch(Exception $e){
-                    $stmt = $conn->prepare("SELECT id, username, password, is_admin FROM users WHERE email = ? LIMIT 1");
+                    // fallback pag wala pa yung bagong columns
+                    $stmt = $conn->prepare("SELECT id, username, password, email, is_admin FROM users WHERE email = ? LIMIT 1");
                     $stmt->execute([$email]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
-                    $user['role'] = 'buyer';
+                    $user['role'] = 'buyer'; $user['is_verified']=true;
                 }
                 if($user && password_verify($password, $user['password'])){
+                    // CHECK VERIFICATION
+                    $is_verified = $user['is_verified'] ?? true; // kung wala pa column, considered verified
+                    if($is_verified==false || $is_verified==0 || $is_verified=='0'){
+                        resendOTPForLogin($conn,$user,true);
+                        header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified");
+                        exit();
+                    }
+
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_name'] = $user['username'];
                     $_SESSION['username'] = $user['username'];
@@ -43,14 +86,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $error_message = $user ? "Incorrect email or password." : "No account found with that email.";
                 }
             } else {
-                $stmt = $conn->prepare("SELECT id, username, password, is_admin, role FROM users WHERE email = ?");
-                if (!$stmt) { $stmt = $conn->prepare("SELECT id, username, password, is_admin FROM users WHERE email = ?"); }
+                $stmt = $conn->prepare("SELECT id, username, password, email, is_admin, role, is_verified, verification_code, verification_expires FROM users WHERE email = ?");
+                if (!$stmt) { $stmt = $conn->prepare("SELECT id, username, password, email, is_admin FROM users WHERE email = ?"); }
                 $stmt->bind_param("s", $email);
                 $stmt->execute();
                 $result = $stmt->get_result();
                 if ($result->num_rows == 1) {
                     $user = $result->fetch_assoc();
                     if (password_verify($password, $user['password'])) {
+                        $is_verified = $user['is_verified'] ?? true;
+                        if($is_verified==0){
+                            resendOTPForLogin($conn,$user,false);
+                            header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified");
+                            exit();
+                        }
                         $_SESSION['user_id'] = $user['id'];
                         $_SESSION['user_name'] = $user['username'];
                         $_SESSION['username'] = $user['username'];
@@ -117,7 +166,6 @@ include 'header.php';
     display:flex; align-items:center; justify-content:center; gap:8px;
 }
 .submit-btn:hover{ background:#000; transform:translateY(-1px); box-shadow:0 8px 20px rgba(0,0,0,0.2); }
-.submit-btn:active{ transform:translateY(0); }
 .divider{ height:1px; background:linear-gradient(to right, transparent, #e5e7eb, transparent); margin:20px 0; }
 </style>
 
@@ -139,11 +187,18 @@ include 'header.php';
             </div>
         <?php endif; ?>
 
+        <?php if(isset($_GET['verified'])): ?>
+            <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; font-weight:700; display:flex; gap:10px;">
+                <i class="fas fa-check-circle" style="margin-top:2px;"></i>
+                <span>Email verified! You can now login.</span>
+            </div>
+        <?php endif; ?>
+
         <form action="login.php" method="post">
             <div class="input-group">
                 <label><i class="fas fa-envelope" style="color:#2a9d8f;"></i> Email Address</label>
                 <div style="position:relative;">
-                    <input type="email" name="email" required placeholder="you@example.com" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+                    <input type="email" name="email" required placeholder="you@gmail.com" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
                 </div>
             </div>
             <div class="input-group">
