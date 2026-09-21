@@ -3,9 +3,6 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $error_message = "";
-$keep_username = '';
-$keep_email = '';
-$keep_role = '';
 $is_pdo = $conn instanceof PDO;
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = trim($_POST['username'] ?? '');
@@ -13,9 +10,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = trim($_POST['password'] ?? '');
     $password_confirm = trim($_POST['password_confirm'] ?? '');
     $role = trim($_POST['role'] ?? '');
-    $keep_username = $username;
-    $keep_email = $email;
-    $keep_role = $role;
     if (empty($username) || empty($email) || empty($password) || empty($password_confirm) || empty($role)) {
         $error_message = "Please fill in all fields and select your account type.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -90,34 +84,34 @@ include 'header.php';
         <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px 12px; border-radius:10px; font-size:0.85rem; font-weight:700; margin-bottom:14px;"><?php echo htmlspecialchars($error_message); ?></div>
         <?php endif; ?>
 
-        <form method="POST" style="display:flex; flex-direction:column; gap:12px;">
+        <form method="POST" autocomplete="off" style="display:flex; flex-direction:column; gap:12px;">
             <div>
                 <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Username</label>
-                <input type="text" name="username" value="<?php echo htmlspecialchars($keep_username); ?>" required placeholder="earlfred" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
+                <input type="text" name="username" value="" required placeholder="Username" autocomplete="new-username" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
             </div>
             <div>
                 <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Email</label>
-                <input type="email" name="email" value="<?php echo htmlspecialchars($keep_email); ?>" required placeholder="name@gmail.com" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
+                <input type="email" name="email" value="" required placeholder="name@gmail.com" autocomplete="new-email" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div>
                     <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Password</label>
-                    <input type="password" name="password" required placeholder="Min. 6 chars" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
+                    <input type="password" name="password" required placeholder="Min. 6 chars" autocomplete="new-password" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
                 </div>
                 <div>
                     <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Confirm</label>
-                    <input type="password" name="password_confirm" required placeholder="Re-type" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
+                    <input type="password" name="password_confirm" required placeholder="Re-type" autocomplete="new-password" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
                 </div>
             </div>
 
             <div>
                 <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Account Type</label>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px;">
-                    <label style="border:1.8px solid <?php echo $keep_role=='buyer'?'#2a9d8f':'#d1d5db'; ?>; background:<?php echo $keep_role=='buyer'?'#e6f7f4':'#fff'; ?>; border-radius:10px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;">
-                        <input type="radio" name="role" value="buyer" <?php echo $keep_role=='buyer'?'checked':''; ?> required> Buyer
+                    <label style="border:1.8px solid #d1d5db; background:#fff; border-radius:10px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;">
+                        <input type="radio" name="role" value="buyer" required> Buyer
                     </label>
-                    <label style="border:1.8px solid <?php echo $keep_role=='farmer'?'#2a9d8f':'#d1d5db'; ?>; background:<?php echo $keep_role=='farmer'?'#e6f7f4':'#fff'; ?>; border-radius:10px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;">
-                        <input type="radio" name="role" value="farmer" <?php echo $keep_role=='farmer'?'checked':''; ?> required> Farmer
+                    <label style="border:1.8px solid #d1d5db; background:#fff; border-radius:10px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;">
+                        <input type="radio" name="role" value="farmer" required> Farmer
                     </label>
                 </div>
             </div>
