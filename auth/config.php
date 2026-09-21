@@ -1,9 +1,9 @@
 <?php
 return [
     'google' => [
-        'client_id' => 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-        'client_secret' => 'YOUR_GOOGLE_CLIENT_SECRET',
-        'redirect_uri' => 'https://bukid2bayan.vercel.app/auth/google.php', // palitan mo ng domain mo
+        'client_id' => '360314848870-gn4ebpcuutkinvon6j2np3g0r7dbp3rg.apps.googleusercontent.com',
+        'client_secret' => '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',
+        'redirect_uri' => 'https://bukid2bayan.vercel.app/auth/google.php',
     ],
     'facebook' => [
         'app_id' => 'YOUR_FACEBOOK_APP_ID',
