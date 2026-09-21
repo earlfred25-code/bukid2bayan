@@ -4,72 +4,117 @@ if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $error_message = "";
 $is_pdo = $conn instanceof PDO;
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $username = trim($_POST['username'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-    $password_confirm = trim($_POST['password_confirm'] ?? '');
-    $role = trim($_POST['role'] ?? '');
-    if (empty($username) || empty($email) || empty($password) || empty($password_confirm) || empty($role)) {
-        $error_message = "Please fill in all fields and select your account type.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = "Please enter a valid email address (e.g., name@gmail.com).";
-    } elseif (strlen($password) < 6) {
-        $error_message = "Password is too short — at least 6 characters needed.";
-    } elseif ($password !== $password_confirm) {
-        $error_message = "Passwords don't match. Please re-type.";
-    } elseif (!in_array($role, ['buyer','farmer'])) {
-        $error_message = "Please select a valid account type.";
+
+function isDisposableDomain($domain){
+    $disposable = ['tempmail.com','temp-mail.org','10minutemail.com','guerrillamail.com','mailinator.com','yopmail.com','getnada.com','tempmail.net','fakeinbox.com'];
+    return in_array(strtolower($domain), $disposable);
+}
+function isLegitGmail($email){
+    $email = strtolower(trim($email));
+    $parts = explode('@', $email);
+    if(count($parts)!=2) return "Invalid email format.";
+    $user = $parts[0]; $domain = $parts[1];
+    if(isDisposableDomain($domain)) return "Disposable / fake email not allowed.";
+    if(function_exists('checkdnsrr') &&!checkdnsrr($domain, 'MX')){
+        return "Email domain doesn't exist.";
+    }
+    if($domain=='gmail.com' || $domain=='googlemail.com'){
+        if(strlen($user) < 6) return "Gmail too short - use real account.";
+        if(preg_match('/^(test|asdf|qwerty|abc|123|fake|temp|admin)/', $user)){
+            return "Please use your real Gmail.";
+        }
+    }
+    return true;
+}
+
+function sendOTPEmail($to_email, $to_name, $otp){
+    $config = include 'email_config.php';
+    // Try PHPMailer kung meron
+    if(file_exists(__DIR__.'/vendor/autoload.php')){
+        require __DIR__.'/vendor/autoload.php';
+        try{
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = $config['host'];
+            $mail->SMTPAuth = true;
+            $mail->Username = $config['username'];
+            $mail->Password = $config['password'];
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = $config['port'];
+            $mail->setFrom($config['from_email'], $config['from_name']);
+            $mail->addAddress($to_email, $to_name);
+            $mail->isHTML(true);
+            $mail->Subject = 'Bukid2Bayan - Verification Code: '.$otp;
+            $mail->Body = "<div style='font-family:Arial;padding:20px'><h2 style='color:#2a9d8f'>Bukid2Bayan</h2><p>Hi $to_name,</p><p>Your verification code is:</p><h1 style='letter-spacing:5px;background:#f5f7f4;padding:12px;border-radius:10px;text-align:center'>$otp</h1><p>Valid for 10 minutes.</p></div>";
+            $mail->send();
+            return true;
+        }catch(Exception $e){ error_log($e->getMessage()); return false; }
     } else {
-        try {
-            if($is_pdo){
-                $stmt=$conn->prepare("SELECT id FROM users WHERE email=? LIMIT 1");
-                $stmt->execute([$email]);
-                $exists=$stmt->fetch(PDO::FETCH_ASSOC);
-                if($exists){
-                    $error_message = "An account with this email already exists. Try logging in instead.";
-                } else {
-                    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                    try {
-                        $ins=$conn->prepare("INSERT INTO users (username, email, password, role) VALUES (?,?,?,?)");
-                        $ok = $ins->execute([$username,$email,$hashed_password,$role]);
-                    } catch(Exception $e){
-                        $ins=$conn->prepare("INSERT INTO users (username, email, password) VALUES (?,?,?)");
-                        $ok = $ins->execute([$username,$email,$hashed_password]);
-                    }
-                    if($ok){
-                        header("Location: login.php?registration=success"); exit();
+        // Fallback - mail() (gagana sa ibang hosting, sa Vercel hindi palagi)
+        $subject = "Bukid2Bayan Code: $otp";
+        $message = "Your Bukid2Bayan verification code is: $otp (valid 10 mins)";
+        $headers = "From: ".$config['from_email'];
+        @mail($to_email, $subject, $message, $headers);
+        return true; // kahit hindi na-send, ipakita natin sa screen for testing
+    }
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $username = trim($_POST['username']?? '');
+    $email = trim($_POST['email']?? '');
+    $password = trim($_POST['password']?? '');
+    $password_confirm = trim($_POST['password_confirm']?? '');
+    $role = trim($_POST['role']?? '');
+    if (empty($username) || empty($email) || empty($password) || empty($password_confirm) || empty($role)) {
+        $error_message = "Please fill in all fields.";
+    } else {
+        $check = isLegitGmail($email);
+        if($check!==true){
+            $error_message = $check;
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error_message = "Please enter a valid email.";
+        } elseif (strlen($password) < 6) {
+            $error_message = "Password too short - min 6 chars.";
+        } elseif ($password!== $password_confirm) {
+            $error_message = "Passwords don't match.";
+        } elseif (!in_array($role, ['buyer','farmer'])) {
+            $error_message = "Invalid account type.";
+        } else {
+            try {
+                if($is_pdo){
+                    $stmt=$conn->prepare("SELECT id FROM users WHERE email=? LIMIT 1");
+                    $stmt->execute([$email]);
+                    if($stmt->fetch()){
+                        $error_message = "Email already exists. Login instead.";
                     } else {
-                        $error_message = "Something went wrong. Please try again.";
+                        $hashed = password_hash($password, PASSWORD_DEFAULT);
+                        $otp = rand(100000,999999);
+                        $expires = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+                        $ins=$conn->prepare("INSERT INTO users (username, email, password, role, is_verified, verification_code, verification_expires) VALUES (?,?,?,?,?,?,?)");
+                        $ok = $ins->execute([$username,$email,$hashed,$role,false,$otp,$expires]);
+                        if($ok){
+                            sendOTPEmail($email,$username,$otp);
+                            header("Location: verify.php?email=".urlencode($email)); exit();
+                        }
+                    }
+                } else {
+                    $stmt=$conn->prepare("SELECT id FROM users WHERE email=?");
+                    $stmt->bind_param("s",$email); $stmt->execute(); $stmt->store_result();
+                    if($stmt->num_rows>0){
+                        $error_message="Email already exists.";
+                    } else {
+                        $hashed=password_hash($password,PASSWORD_DEFAULT);
+                        $otp=rand(100000,999999);
+                        $expires=date('Y-m-d H:i:s',strtotime('+10 minutes'));
+                        $ins=$conn->prepare("INSERT INTO users (username,email,password,role,is_verified,verification_code,verification_expires) VALUES (?,?,?,?,?,?,?)");
+                        $is_verified=0; $ins->bind_param("ssssiss",$username,$email,$hashed,$role,$is_verified,$otp,$expires);
+                        if($ins->execute()){
+                            sendOTPEmail($email,$username,$otp);
+                            header("Location: verify.php?email=".urlencode($email)); exit();
+                        }
                     }
                 }
-            } else {
-                $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-                $stmt->bind_param("s", $email);
-                $stmt->execute();
-                $stmt->store_result();
-                if ($stmt->num_rows > 0) {
-                    $error_message = "An account with this email already exists. Try logging in instead.";
-                } else {
-                    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                    $insert_stmt = $conn->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)");
-                    if(!$insert_stmt){
-                        $insert_stmt = $conn->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
-                        $insert_stmt->bind_param("sss", $username, $email, $hashed_password);
-                    } else {
-                        $insert_stmt->bind_param("ssss", $username, $email, $hashed_password, $role);
-                    }
-                    if ($insert_stmt->execute()) {
-                        header("Location: login.php?registration=success"); exit();
-                    } else {
-                        $error_message = "Something went wrong. Please try again.";
-                    }
-                    $insert_stmt->close();
-                }
-                $stmt->close();
-            }
-        } catch(Exception $e){
-            $error_message = "Error: ".$e->getMessage();
+            }catch(Exception $e){ $error_message="Error: ".$e->getMessage(); }
         }
     }
 }
@@ -77,49 +122,22 @@ include 'header.php';
 ?>
 <div style="padding:2rem 1rem; min-height:70vh; display:flex; align-items:center; justify-content:center; background:#f5f7f4;">
     <div style="background:#fff; max-width:460px; width:100%; border-radius:16px; padding:26px; box-shadow:0 10px 30px rgba(0,0,0,0.08); border:1px solid #eee;">
-        <h2 style="margin:0 0 6px 0; font-size:1.6rem; font-weight:900; letter-spacing:-0.5px;">Create Account</h2>
-        <p style="margin:0 0 18px 0; color:#666; font-size:0.9rem;">Join Bukid2Bayan - From Bukid to Bayan</p>
-
-        <?php if($error_message): ?>
-        <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px 12px; border-radius:10px; font-size:0.85rem; font-weight:700; margin-bottom:14px;"><?php echo htmlspecialchars($error_message); ?></div>
-        <?php endif; ?>
-
+        <h2 style="margin:0 0 6px 0; font-size:1.6rem; font-weight:900;">Create Account</h2>
+        <p style="margin:0 0 18px 0; color:#666; font-size:0.9rem;">We'll send a verification code to your Gmail</p>
+        <?php if($error_message):?><div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px 12px;border-radius:10px;font-size:0.85rem;font-weight:700;margin-bottom:14px;"><?php echo htmlspecialchars($error_message);?></div><?php endif;?>
         <form method="POST" autocomplete="off" style="display:flex; flex-direction:column; gap:12px;">
-            <div>
-                <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Username</label>
-                <input type="text" name="username" value="" required placeholder="Username" autocomplete="new-username" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
-            </div>
-            <div>
-                <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Email</label>
-                <input type="email" name="email" value="" required placeholder="name@gmail.com" autocomplete="new-email" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
+            <input type="text" name="username" value="" required placeholder="Username" autocomplete="off" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px;">
+            <input type="email" name="email" value="" required placeholder="Real Gmail (e.g. name@gmail.com)" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <input type="password" name="password" required placeholder="Password" style="padding:12px; border:1.8px solid #d1d5db; border-radius:10px;">
+                <input type="password" name="password_confirm" required placeholder="Confirm" style="padding:12px; border:1.8px solid #d1d5db; border-radius:10px;">
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <div>
-                    <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Password</label>
-                    <input type="password" name="password" required placeholder="Min. 6 chars" autocomplete="new-password" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
-                </div>
-                <div>
-                    <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Confirm</label>
-                    <input type="password" name="password_confirm" required placeholder="Re-type" autocomplete="new-password" style="width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:10px; box-sizing:border-box;">
-                </div>
+                <label style="border:1.8px solid #d1d5db; border-radius:10px; padding:12px; cursor:pointer; font-weight:700; font-size:0.9rem;"><input type="radio" name="role" value="buyer" required> Buyer</label>
+                <label style="border:1.8px solid #d1d5db; border-radius:10px; padding:12px; cursor:pointer; font-weight:700; font-size:0.9rem;"><input type="radio" name="role" value="farmer" required> Farmer</label>
             </div>
-
-            <div>
-                <label style="font-weight:800; font-size:0.85rem; display:block; margin-bottom:6px;">Account Type</label>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px;">
-                    <label style="border:1.8px solid #d1d5db; background:#fff; border-radius:10px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;">
-                        <input type="radio" name="role" value="buyer" required> Buyer
-                    </label>
-                    <label style="border:1.8px solid #d1d5db; background:#fff; border-radius:10px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;">
-                        <input type="radio" name="role" value="farmer" required> Farmer
-                    </label>
-                </div>
-            </div>
-
-            <button type="submit" style="width:100%; background:#111; color:#fff; padding:14px; border:none; border-radius:12px; font-weight:900; font-size:1rem; cursor:pointer; margin-top:6px;">Sign Up</button>
-
-            <p style="text-align:center; font-size:0.85rem; color:#666; margin:6px 0 0 0;">Already have account? <a href="login.php" style="color:#2a9d8f; font-weight:800; text-decoration:none;">Login</a></p>
+            <button type="submit" style="width:100%; background:#111; color:#fff; padding:14px; border:none; border-radius:12px; font-weight:900; cursor:pointer;">Sign Up & Send Code</button>
         </form>
     </div>
 </div>
-<?php include 'footer.php'; ?>
+<?php include 'footer.php';?>
