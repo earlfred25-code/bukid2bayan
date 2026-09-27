@@ -36,7 +36,7 @@ if(!isset($_GET['code'])){
     $is_pdo = $conn instanceof PDO;
     $email = $userInfo['email'];
 
-    // Check kung existing na
+ 
     if($is_pdo){
         $stmt=$conn->prepare("SELECT id, role, is_admin FROM users WHERE email=? LIMIT 1");
         $stmt->execute([$email]); $u=$stmt->fetch(PDO::FETCH_ASSOC);
@@ -46,7 +46,7 @@ if(!isset($_GET['code'])){
     }
 
     if($u){
-        // Luma na user - rekta login na
+  
         $_SESSION['user_id']=$u['id']; $_SESSION['user_name']=$u['id']; $_SESSION['role']=$u['role']; $_SESSION['is_admin']=$u['is_admin']??0;
         if($u['role'] == 'farmer' || $u['role'] == 'seller'){
             header("Location: /farmer_dashboard.php");
@@ -55,7 +55,7 @@ if(!isset($_GET['code'])){
         }
         exit();
     } else {
-        // BAGONG USER - dalhin sa fill up page
+   
         $_SESSION['oauth_pending'] = [
             'email' => $userInfo['email'],
             'name' => $userInfo['name'],
