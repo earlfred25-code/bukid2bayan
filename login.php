@@ -71,10 +71,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
                     $_SESSION['role'] = $user['role'] ?? 'buyer';
-                    setcookie('user_id', $user['id'], time()+86400*30, '/');
-                    setcookie('user_name', $user['username'], time()+86400*30, '/');
-                    setcookie('role', $user['role'] ?? 'buyer', time()+86400*30, '/');
-                    setcookie('is_admin', $user['is_admin'] ?? 0, time()+86400*30, '/');
+                    setcookie('user_id', $user['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
+                    setcookie('user_name', $user['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                    setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                    setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
                     if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
                     elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_dashboard.php"); }
                     else { header("Location: buyer_dashboard.php"); }
@@ -102,10 +102,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
                         $_SESSION['role'] = $user['role'] ?? 'buyer';
-                        setcookie('user_id', $user['id'], time()+86400*30, '/');
-                        setcookie('user_name', $user['username'], time()+86400*30, '/');
-                        setcookie('role', $user['role'] ?? 'buyer', time()+86400*30, '/');
-                        setcookie('is_admin', $user['is_admin'] ?? 0, time()+86400*30, '/');
+                        setcookie('user_id', $user['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
+                        setcookie('user_name', $user['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                        setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                        setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
                         if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
                         elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_dashboard.php"); }
                         else { header("Location: buyer_dashboard.php"); }
