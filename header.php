@@ -1,5 +1,30 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    if (file_exists(__DIR__.'/db_connect.php')) {
+        include_once __DIR__.'/db_connect.php';
+        $is_pdo_tmp = isset($conn) && $conn instanceof PDO;
+        $uid_cookie = $_COOKIE['user_id'];
+        try{
+            if($is_pdo_tmp){
+                $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+                $st->execute([$uid_cookie]);
+                $u = $st->fetch(PDO::FETCH_ASSOC);
+            } else {
+                $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+                $st->bind_param("i", $uid_cookie);
+                $st->execute();
+                $u = $st->get_result()->fetch_assoc();
+            }
+            if($u){
+                $_SESSION['user_id'] = $u['id'];
+                $_SESSION['user_name'] = $u['username'];
+                $_SESSION['role'] = $u['role']?? 'buyer';
+                $_SESSION['is_admin'] = $u['is_admin']?? 0;
+            }
+        }catch(Exception $e){}
+    }
+}
 $current_page = strtolower(basename($_SERVER['PHP_SELF'] ?? ''));
 $hide_categories = in_array($current_page, ['login.php','register.php']);
 $cart_count = 0;
@@ -10,7 +35,7 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
         else $cart_count += 1;
     }
 }
-$is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']);
+$is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']) || isset($_COOKIE['user_id']);
 $cart_link = $is_logged ? 'cart.php' : 'login.php';
 $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
 $profile_link = $is_logged ? 'profile.php' : 'login.php';
@@ -90,7 +115,7 @@ $profile_link = $is_logged ? 'profile.php' : 'login.php';
                     <a href="<?php echo $is_logged ? 'notifications.php' : 'login.php'; ?>"><i class="fas fa-bell"></i> Notifications</a>
                     <a href="help.php">Help</a>
                     <?php if ($is_logged) { ?>
-                        <span style="font-weight:600; color:#111;">Hi, <?php echo htmlspecialchars($_SESSION['user_name'] ?? 'Farmer'); ?></span><a href="logout.php">Logout</a>
+                        <span style="font-weight:600; color:#111;">Hi, <?php echo htmlspecialchars($_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer'); ?></span><a href="logout.php">Logout</a>
                     <?php } else { ?>
                         <a href="register.php">Sign Up</a><a href="login.php" class="login-pill">Login</a>
                     <?php } ?>
