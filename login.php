@@ -1,8 +1,8 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
-if (isset($_SESSION['user_id'])) {
-    $is_admin = $_SESSION['is_admin'] ?? 0;
-    $role = $_SESSION['role'] ?? '';
+if (isset($_SESSION['user_id']) || isset($_COOKIE['user_id'])) {
+    $is_admin = $_SESSION['is_admin'] ?? $_COOKIE['is_admin'] ?? 0;
+    $role = $_SESSION['role'] ?? $_COOKIE['role'] ?? '';
     if ($is_admin == 1) { header("Location: admin/index.php"); }
     elseif ($role === 'farmer') { header("Location: farmer_dashboard.php"); }
     else { header("Location: buyer_dashboard.php"); }
@@ -71,6 +71,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
                     $_SESSION['role'] = $user['role'] ?? 'buyer';
+                    setcookie('user_id', $user['id'], time()+86400*30, '/');
+                    setcookie('user_name', $user['username'], time()+86400*30, '/');
+                    setcookie('role', $user['role'] ?? 'buyer', time()+86400*30, '/');
+                    setcookie('is_admin', $user['is_admin'] ?? 0, time()+86400*30, '/');
                     if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
                     elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_dashboard.php"); }
                     else { header("Location: buyer_dashboard.php"); }
@@ -98,6 +102,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
                         $_SESSION['role'] = $user['role'] ?? 'buyer';
+                        setcookie('user_id', $user['id'], time()+86400*30, '/');
+                        setcookie('user_name', $user['username'], time()+86400*30, '/');
+                        setcookie('role', $user['role'] ?? 'buyer', time()+86400*30, '/');
+                        setcookie('is_admin', $user['is_admin'] ?? 0, time()+86400*30, '/');
                         if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
                         elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_dashboard.php"); }
                         else { header("Location: buyer_dashboard.php"); }
