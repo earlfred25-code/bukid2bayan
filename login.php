@@ -11,8 +11,6 @@ if (isset($_SESSION['user_id'])) {
 include 'db_connect.php';
 $error_message = "";
 $is_pdo = $conn instanceof PDO;
-
-// function para mag-send ng bagong OTP pag mag-login yung hindi pa verified
 function resendOTPForLogin($conn, $user, $is_pdo){
     $otp = rand(100000,999999);
     $expires = date('Y-m-d H:i:s', strtotime('+10 minutes'));
@@ -23,7 +21,6 @@ function resendOTPForLogin($conn, $user, $is_pdo){
             $stmt=$conn->prepare("UPDATE users SET verification_code=?, verification_expires=? WHERE id=?");
             $stmt->bind_param("ssi",$otp,$expires,$user['id']); $stmt->execute();
         }
-        // send email kung may config ka na
         if(file_exists(__DIR__.'/email_config.php')){
             $config = include __DIR__.'/email_config.php';
             if(file_exists(__DIR__.'/vendor/autoload.php')){
@@ -44,7 +41,6 @@ function resendOTPForLogin($conn, $user, $is_pdo){
         }
     }catch(Exception $e){}
 }
-
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
@@ -58,21 +54,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $stmt->execute([$email]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
                 } catch(Exception $e){
-                    // fallback pag wala pa yung bagong columns
                     $stmt = $conn->prepare("SELECT id, username, password, email, is_admin FROM users WHERE email = ? LIMIT 1");
                     $stmt->execute([$email]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
                     $user['role'] = 'buyer'; $user['is_verified']=true;
                 }
                 if($user && password_verify($password, $user['password'])){
-                    // CHECK VERIFICATION
-                    $is_verified = $user['is_verified'] ?? true; // kung wala pa column, considered verified
+                    $is_verified = $user['is_verified'] ?? true;
                     if($is_verified==false || $is_verified==0 || $is_verified=='0'){
                         resendOTPForLogin($conn,$user,true);
                         header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified");
                         exit();
                     }
-
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_name'] = $user['username'];
                     $_SESSION['username'] = $user['username'];
@@ -167,8 +160,23 @@ include 'header.php';
 }
 .submit-btn:hover{ background:#000; transform:translateY(-1px); box-shadow:0 8px 20px rgba(0,0,0,0.2); }
 .divider{ height:1px; background:linear-gradient(to right, transparent, #e5e7eb, transparent); margin:20px 0; }
+.social-divider{
+    display:flex; align-items:center; gap:12px; margin:20px 0;
+    font-size:0.75rem; font-weight:800; color:#9ca3af; letter-spacing:1px; justify-content:center;
+}
+.social-divider::before, .social-divider::after{
+    content:""; flex:1; height:1px; background:#e5e7eb;
+}
+.social-btn{
+    width:100%; padding:13px; border-radius:12px; border:1.5px solid #e5e7eb;
+    background:#fff; font-weight:800; font-size:0.92rem; display:flex;
+    align-items:center; justify-content:center; gap:10px; text-decoration:none;
+    color:#111; transition:all 0.2s; margin-bottom:10px;
+}
+.social-btn:hover{ background:#f9fafb; transform:translateY(-1px); box-shadow:0 6px 16px rgba(0,0,0,0.08); }
+.social-btn.facebook{ background:#1877f2; color:#fff; border-color:#1877f2; }
+.social-btn.facebook:hover{ background:#166fe5; }
 </style>
-
 <div class="login-page">
     <div class="form-box">
         <div style="text-align:center; margin-bottom:22px;">
@@ -179,21 +187,18 @@ include 'header.php';
             <h2 style="font-size:1.9rem; margin:12px 0 4px 0; font-weight:900; letter-spacing:-0.5px; color:#111;">Welcome Back</h2>
             <p style="font-size:0.9rem; color:#6b7280; margin:0;">Fresh gulay at bigas, diretso sa bayan</p>
         </div>
-
         <?php if(!empty($error_message)): ?>
             <div style="background:#fef2f2; border:1.5px solid #fecaca; color:#991b1b; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; display:flex; gap:10px;">
                 <i class="fas fa-exclamation-triangle" style="margin-top:2px;"></i>
                 <span><?php echo htmlspecialchars($error_message); ?></span>
             </div>
         <?php endif; ?>
-
         <?php if(isset($_GET['verified'])): ?>
             <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; font-weight:700; display:flex; gap:10px;">
                 <i class="fas fa-check-circle" style="margin-top:2px;"></i>
                 <span>Email verified! You can now login.</span>
             </div>
         <?php endif; ?>
-
         <form action="login.php" method="post">
             <div class="input-group">
                 <label><i class="fas fa-envelope" style="color:#2a9d8f;"></i> Email Address</label>
@@ -210,7 +215,13 @@ include 'header.php';
             </div>
             <button type="submit" class="submit-btn"><i class="fas fa-sign-in-alt"></i> Login</button>
         </form>
-
+        <div class="social-divider">OR</div>
+        <a href="auth/google.php" class="social-btn">
+            <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width:18px;height:18px;"> Continue with Google
+        </a>
+        <a href="auth/facebook.php" class="social-btn facebook">
+            <i class="fab fa-facebook" style="font-size:18px;"></i> Continue with Facebook
+        </a>
         <div class="divider"></div>
         <p style="margin:0; font-size:0.9rem; text-align:center; color:#6b7280;">
             Wala ka pa account? <a href="register.php" style="font-weight:900; color:#2a9d8f; text-decoration:none;">Gumawa ng bago</a>
@@ -220,7 +231,6 @@ include 'header.php';
         </p>
     </div>
 </div>
-
 <script>
 function togglePass(){
     const input = document.getElementById('password');
