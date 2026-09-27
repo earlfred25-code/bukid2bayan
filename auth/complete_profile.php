@@ -35,9 +35,23 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             } else {
                 try{
                     if($is_pdo){
-                        $stmt=$conn->prepare("INSERT INTO users (username,email,password,google_id,role,phone_number,is_verified) VALUES (?,?,?,?,?,?,1)");
-                        $stmt->execute([$username,$email,$dummy_pass,$google_id,$role,$phone]);
-                        $uid=$conn->lastInsertId();
+                        $check = $conn->prepare("SELECT id FROM users WHERE email =? LIMIT 1");
+                        $check->execute([$email]);
+                        if($check->fetch()){
+                            $upd = $conn->prepare("UPDATE users SET google_id =?, role =?, phone_number =?, is_verified = true WHERE email =?");
+                            $upd->execute([$google_id, $role, $phone, $email]);
+                            $uid = $conn->query("SELECT id FROM users WHERE email = '$email' LIMIT 1")->fetchColumn();
+                            if(!$uid){
+                                $uid = $conn->prepare("SELECT id FROM users WHERE email =?")->execute([$email]);
+                            }
+                            $get = $conn->prepare("SELECT id FROM users WHERE email =?");
+                            $get->execute([$email]);
+                            $uid = $get->fetchColumn();
+                        } else {
+                            $stmt=$conn->prepare("INSERT INTO users (username,email,password,google_id,role,phone_number,is_verified) VALUES (?,?,?,?,?,?,true)");
+                            $stmt->execute([$username,$email,$dummy_pass,$google_id,$role,$phone]);
+                            $uid=$conn->lastInsertId();
+                        }
                     } else {
                         $stmt=$conn->prepare("INSERT INTO users (username,email,password,google_id,role,phone_number,is_verified) VALUES (?,?,?,?,?,?,?)");
                         $is_verified=1;
@@ -53,7 +67,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
                     header("Location: /".($role=='farmer'||$role=='seller'?'farmer_centre.php':'index.php'));
                     exit();
                 }catch(Exception $e){
-                    $error = "May kamukha ka nang email/username. Try iba.";
+                    $error = $e->getMessage();
                 }
             }
         }
@@ -79,7 +93,7 @@ $site_key = $config['recaptcha']['site_key']?? $_ENV['RECAPTCHA_SITE_KEY']?? '6L
             <p class="text-gray-500 text-sm">Hi <?= htmlspecialchars(explode(' ', $oauth['name'])[0]?? 'kap')?>, last step na to</p>
         </div>
         <div class="px-6 pb-6">
-            <?php if(isset($error)):?><div class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl mb-4 text-sm"><?= htmlspecialchars($error)?></div><?php endif;?>
+            <?php if(isset($error)):?><div class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl mb-4 text-sm break-all"><?= htmlspecialchars($error)?></div><?php endif;?>
             <form method="POST" class="space-y-4">
                 <div>
                     <label class="text-xs font-bold text-gray-600">Pangalan</label>
