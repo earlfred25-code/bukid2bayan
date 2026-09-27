@@ -37,33 +37,43 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
                     if($is_pdo){
                         $check = $conn->prepare("SELECT id FROM users WHERE email =? LIMIT 1");
                         $check->execute([$email]);
-                        if($check->fetch()){
+                        $existing = $check->fetch(PDO::FETCH_ASSOC);
+                        if($existing){
                             $upd = $conn->prepare("UPDATE users SET google_id =?, role =?, phone_number =?, is_verified = true WHERE email =?");
                             $upd->execute([$google_id, $role, $phone, $email]);
-                            $uid = $conn->query("SELECT id FROM users WHERE email = '$email' LIMIT 1")->fetchColumn();
-                            if(!$uid){
-                                $uid = $conn->prepare("SELECT id FROM users WHERE email =?")->execute([$email]);
-                            }
-                            $get = $conn->prepare("SELECT id FROM users WHERE email =?");
-                            $get->execute([$email]);
-                            $uid = $get->fetchColumn();
+                            $uid = $existing['id'];
                         } else {
                             $stmt=$conn->prepare("INSERT INTO users (username,email,password,google_id,role,phone_number,is_verified) VALUES (?,?,?,?,?,?,true)");
                             $stmt->execute([$username,$email,$dummy_pass,$google_id,$role,$phone]);
                             $uid=$conn->lastInsertId();
                         }
                     } else {
-                        $stmt=$conn->prepare("INSERT INTO users (username,email,password,google_id,role,phone_number,is_verified) VALUES (?,?,?,?,?,?,?)");
-                        $is_verified=1;
-                        $stmt->bind_param("ssssssi",$username,$email,$dummy_pass,$google_id,$role,$phone,$is_verified);
-                        $stmt->execute();
-                        $uid=$stmt->insert_id;
+                        $chk=$conn->prepare("SELECT id FROM users WHERE email =? LIMIT 1");
+                        $chk->bind_param("s",$email);
+                        $chk->execute();
+                        $res=$chk->get_result()->fetch_assoc();
+                        if($res){
+                            $upd=$conn->prepare("UPDATE users SET google_id =?, role =?, phone_number =?, is_verified =1 WHERE email =?");
+                            $upd->bind_param("ssss",$google_id,$role,$phone,$email);
+                            $upd->execute();
+                            $uid=$res['id'];
+                        } else {
+                            $stmt=$conn->prepare("INSERT INTO users (username,email,password,google_id,role,phone_number,is_verified) VALUES (?,?,?,?,?,?,?)");
+                            $is_verified=1;
+                            $stmt->bind_param("ssssssi",$username,$email,$dummy_pass,$google_id,$role,$phone,$is_verified);
+                            $stmt->execute();
+                            $uid=$stmt->insert_id;
+                        }
                     }
                     unset($_SESSION['oauth_pending']);
                     $_SESSION['user_id']=$uid;
                     $_SESSION['user_name']=$username;
                     $_SESSION['role']=$role;
                     $_SESSION['is_admin']=0;
+                    setcookie('user_id', $uid, time()+86400*30, '/');
+                    setcookie('user_name', $username, time()+86400*30, '/');
+                    setcookie('role', $role, time()+86400*30, '/');
+                    setcookie('is_admin', 0, time()+86400*30, '/');
                     header("Location: /".($role=='farmer'||$role=='seller'?'farmer_centre.php':'index.php'));
                     exit();
                 }catch(Exception $e){
