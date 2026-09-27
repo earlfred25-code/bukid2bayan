@@ -9,5 +9,9 @@ return [
         'app_id' => 'YOUR_FACEBOOK_APP_ID',
         'app_secret' => 'YOUR_FACEBOOK_APP_SECRET',
         'redirect_uri' => 'https://bukid2bayan.vercel.app/auth/facebook.php',
+    ],
+    'recaptcha' => [
+        'site_key' => '6LethNEtAAAAAL5PWr5m0eVNyr81u6b-EpAs3jwp',
+        'secret_key' => '6LethNEtAAAAALpakvndTVHdialFIBgv5JO8RMsE',
     ]
 ];
