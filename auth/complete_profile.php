@@ -70,10 +70,10 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
                     $_SESSION['user_name']=$username;
                     $_SESSION['role']=$role;
                     $_SESSION['is_admin']=0;
-                    setcookie('user_id', $uid, time()+86400*30, '/');
-                    setcookie('user_name', $username, time()+86400*30, '/');
-                    setcookie('role', $role, time()+86400*30, '/');
-                    setcookie('is_admin', 0, time()+86400*30, '/');
+                    setcookie('user_id', $uid, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
+                    setcookie('user_name', $username, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                    setcookie('role', $role, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                    setcookie('is_admin', 0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
                     header("Location: /".($role=='farmer'||$role=='seller'?'farmer_centre.php':'index.php'));
                     exit();
                 }catch(Exception $e){
