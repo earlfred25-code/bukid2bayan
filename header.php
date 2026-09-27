@@ -13,6 +13,7 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
 $is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']);
 $cart_link = $is_logged ? 'cart.php' : 'login.php';
 $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
+$profile_link = $is_logged ? 'profile.php' : 'login.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,6 +56,15 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         .mobile-menu.active{ display:block; }
         .mobile-menu a{ display:block; padding:14px 0; border-bottom:1px solid #eee; color:#1a1a1a; text-decoration:none; font-weight:600; font-size:1rem; }
         .mobile-menu a i{ width:24px; }
+        .acc-wrap{ position:relative; }
+        .acc-dropdown{
+            position:absolute; right:0; top:100%; margin-top:10px; width:190px;
+            background:#fff; border:1px solid #eee; border-radius:12px;
+            box-shadow:0 10px 30px rgba(0,0,0,0.12); padding:6px; display:none;
+        }
+        .acc-wrap:hover .acc-dropdown{ display:block; }
+        .acc-dropdown a{ display:flex; gap:10px; align-items:center; padding:10px 12px; border-radius:8px; font-size:0.88rem; }
+        .acc-dropdown a:hover{ background:#f5f7f5; }
         @media(max-width:900px){
             body{ padding-top:68px; }
             .top-glass{ display:none; }
@@ -100,7 +110,19 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
             <?php } ?>
             <div class="ss-right">
                 <a href="products.php" class="hide-mobile"><i class="fas fa-search" style="font-size:1rem;"></i></a>
-                <a href="<?php echo $is_logged ? 'farmer_centre.php' : 'login.php'; ?>" class="hide-mobile"><i class="far fa-user"></i> Account</a>
+                <?php if($is_logged){ ?>
+                    <div class="acc-wrap hide-mobile">
+                        <a href="profile.php"><i class="far fa-user"></i> Account</a>
+                        <div class="acc-dropdown">
+                            <a href="profile.php"><i class="fas fa-user-circle"></i> Profile</a>
+                            <a href="farmer_centre.php"><i class="fas fa-store"></i> Farmer Centre</a>
+                            <a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a>
+                            <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        </div>
+                    </div>
+                <?php } else { ?>
+                    <a href="login.php" class="hide-mobile"><i class="far fa-user"></i> Account</a>
+                <?php } ?>
                 <a href="<?php echo $cart_link; ?>" class="ss-cart"><i class="fas fa-shopping-cart"></i> <span class="hide-mobile">Cart</span> <?php if ($is_logged && $cart_count > 0){ ?><span class="ss-badge"><?php echo $cart_count; ?></span><?php } ?></a>
                 <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')"><i class="fas fa-bars"></i></button>
             </div>
@@ -113,8 +135,14 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         <a href="products.php?cat=essentials"><i class="fas fa-box"></i> Essentials</a>
         <a href="products.php"><i class="fas fa-search"></i> Search Products</a>
         <?php } ?>
+        <?php if($is_logged){ ?>
+        <a href="profile.php"><i class="fas fa-user-circle"></i> Profile</a>
         <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Centre</a>
         <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
+        <?php } else { ?>
+        <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Centre</a>
+        <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
+        <?php } ?>
         <a href="<?php echo $cart_link; ?>"><i class="fas fa-shopping-cart"></i> Cart (<?php echo $cart_count; ?>)</a>
         <?php if($is_logged){ ?>
         <a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a>
