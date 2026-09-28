@@ -3,13 +3,36 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role'] ?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_SESSION['loggedin'])) {
     header('Location: login.php');
     exit();
 }
 
-$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? 0);
-$user_name = $_SESSION['user_name'] ?? $_SESSION['user']['name'] ?? 'Farmer';
+$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? $_COOKIE['user_id'] ?? 0);
+$user_name = $_SESSION['user_name'] ?? $_SESSION['user']['name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
 $is_pdo = $conn instanceof PDO;
 $is_pgsql = $is_pdo && $conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
 
@@ -33,30 +56,46 @@ if (!function_exists('addTracking')) {
 
 try {
     if ($is_pgsql) {
-        $conn->exec("CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0)");
+        $conn->exec("CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0, category VARCHAR(50) DEFAULT 'Gulay', description TEXT)");
         $conn->exec("CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, user_id INT, customer_name VARCHAR(255), phone VARCHAR(50), address TEXT, total_amount DECIMAL(10,2), payment_method VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', tracking_number VARCHAR(50), courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress', farmer_lat DECIMAL(10,7) DEFAULT 14.3320, farmer_lng DECIMAL(10,7) DEFAULT 121.0850, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
         $conn->exec("CREATE TABLE IF NOT EXISTS order_items (id SERIAL PRIMARY KEY, order_id INT, product_id INT, product_name VARCHAR(255), price DECIMAL(10,2), quantity INT, farmer_id INT NULL)");
     } else {
-        $conn->query("CREATE TABLE IF NOT EXISTS products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0)");
+        $conn->query("CREATE TABLE IF NOT EXISTS products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0, category VARCHAR(50) DEFAULT 'Gulay', description TEXT)");
         $conn->query("CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, customer_name VARCHAR(255), phone VARCHAR(50), address TEXT, total_amount DECIMAL(10,2), payment_method VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', tracking_number VARCHAR(50), courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress', farmer_lat DECIMAL(10,7) DEFAULT 14.3320, farmer_lng DECIMAL(10,7) DEFAULT 121.0850, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
         $conn->query("CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, product_id INT, product_name VARCHAR(255), price DECIMAL(10,2), quantity INT, farmer_id INT NULL)");
     }
 } catch(Exception $e){}
 
 if (isset($_POST['add_product'])) {
-    $name = trim($_POST['name']);
-    $price = (float)$_POST['price'];
-    $unit = trim($_POST['unit']);
-    $image = trim($_POST['image_url']);
+    $name = trim($_POST['name'] ?? '');
+    $price = (float)($_POST['price'] ?? 0);
+    $unit = trim($_POST['unit'] ?? 'kg');
     $stock = (int)($_POST['stock'] ?? 0);
+    $category = trim($_POST['category'] ?? 'Gulay');
+    $description = trim($_POST['description'] ?? '');
+    $image = trim($_POST['image_url'] ?? '');
+
+    if(isset($_FILES['image']) && $_FILES['image']['error'] == 0){
+        $uploadDir = __DIR__.'/uploads';
+        if(!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+        $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        if(in_array($ext, ['jpg','jpeg','png','webp'])){
+            $newName = 'prod_'.$user_id.'_'.time().'_'.rand(100,999).'.'.$ext;
+            $dest = $uploadDir.'/'.$newName;
+            if(move_uploaded_file($_FILES['image']['tmp_name'], $dest)){
+                $image = 'uploads/'.$newName;
+            }
+        }
+    }
+
     if ($name != '' && $price > 0) {
         try {
             if($is_pdo){
-                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock) VALUES (?,?,?,?,?,?,?,?)");
-                $stmt->execute([$name,$user_name,$price,$unit,$image,$user_id,$user_id,$stock]);
+                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock, category, description) VALUES (?,?,?,?,?,?,?,?,?,?)");
+                $stmt->execute([$name,$user_name,$price,$unit,$image,$user_id,$user_id,$stock,$category,$description]);
             } else {
-                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("ssdssiii", $name, $user_name, $price, $unit, $image, $user_id, $user_id, $stock);
+                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock, category, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("ssdssiiiss", $name, $user_name, $price, $unit, $image, $user_id, $user_id, $stock, $category, $description);
                 $stmt->execute(); $stmt->close();
             }
             $_SESSION['flash']['success'] = "$name na-add na sa Farmer Centre!";
@@ -236,15 +275,39 @@ include 'header.php';
     <div class="fc-grid">
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; height:fit-content;">
             <h3 style="font-weight:900; margin:0 0 14px 0;">Add New Product</h3>
-            <form method="post">
+            <form method="post" enctype="multipart/form-data">
                 <input type="text" name="name" placeholder="Product Name ex: Lettuce" required style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px; font-weight:700;">
-                <div style="display:flex; gap:8px;">
-                    <input type="number" step="0.01" name="price" placeholder="Price" required style="flex:1; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px; font-weight:700;">
-                    <input type="text" name="unit" placeholder="kg / tray" value="kg" required style="width:90px; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px; font-weight:700;">
+                
+                <label style="font-weight:800; font-size:0.85rem; margin-bottom:4px; display:block;">Price (₱)</label>
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                    <input type="number" step="0.01" name="price" placeholder="50.00" value="50.00" required style="flex:1; padding:12px; border:2px solid #ddd; border-radius:10px; font-weight:700;">
+                    <input type="text" name="unit" value="kg" style="width:90px; padding:12px; border:2px solid #ddd; border-radius:10px; font-weight:700;">
                 </div>
-                <input type="number" name="stock" placeholder="Stock ilan piraso" style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px; font-weight:700;">
-                <input type="text" name="image_url" placeholder="Image URL https://..." style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:14px;">
-                <button type="submit" name="add_product" style="width:100%; background:#2a9d8f; color:#fff; border:none; padding:14px; border-radius:10px; font-weight:900; cursor:pointer;"><i class="fas fa-plus"></i> Add Product</button>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div>
+                        <label style="font-weight:800; font-size:0.85rem; margin-bottom:4px; display:block;">Stock (kg/pcs)</label>
+                        <input type="number" name="stock" placeholder="100" value="100" style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; font-weight:700;">
+                    </div>
+                    <div>
+                        <label style="font-weight:800; font-size:0.85rem; margin-bottom:4px; display:block;">Category</label>
+                        <select name="category" style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; font-weight:700;">
+                            <option value="Gulay">Gulay</option>
+                            <option value="Prutas">Prutas</option>
+                            <option value="Bigas">Bigas</option>
+                            <option value="Itlog">Itlog</option>
+                            <option value="Essentials">Essentials</option>
+                        </select>
+                    </div>
+                </div>
+
+                <label style="font-weight:800; font-size:0.85rem; margin-bottom:4px; display:block;">Image</label>
+                <input type="file" name="image" accept="image/*" style="width:100%; padding:10px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px;">
+
+                <label style="font-weight:800; font-size:0.85rem; margin-bottom:4px; display:block;">Description</label>
+                <textarea name="description" placeholder="Fresh from farm..." style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:14px; min-height:80px; font-weight:600;"></textarea>
+
+                <button type="submit" name="add_product" style="width:100%; background:#2a9d8f; color:#fff; border:none; padding:14px; border-radius:10px; font-weight:900; cursor:pointer;">Add Product</button>
             </form>
         </div>
 
