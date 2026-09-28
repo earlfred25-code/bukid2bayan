@@ -1,4 +1,6 @@
 <?php
+ob_start();
+ini_set('session.save_path', sys_get_temp_dir());
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
@@ -9,7 +11,7 @@ $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
 $secure = $is_https;
 
-// restore from cookie pag nawala session sa Vercel
+// RESTORE FROM COOKIE - VERCEL FIX
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     try{
         $uid = (int)$_COOKIE['user_id'];
@@ -34,12 +36,12 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     }catch(Exception $e){}
 }
 
-// kung naka-login na, redirect agad
+// KUNG NAKA-LOGIN NA - REDIRECT AGAD SA TAMANG DASHBOARD
 if (isset($_SESSION['user_id'])) {
     $is_admin = $_SESSION['is_admin'] ?? 0;
     $role = strtolower($_SESSION['role'] ?? 'buyer');
     if ($is_admin == 1) { header("Location: admin/index.php"); exit(); }
-    elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+    elseif (in_array($role, ['farmer','seller'])) { header("Location: farmer_dashboard.php"); exit(); }
     else { header("Location: buyer_dashboard.php"); exit(); }
 }
 
@@ -94,7 +96,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                     $role = strtolower($_SESSION['role'] ?? 'buyer');
                     if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); exit(); }
-                    elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+                    elseif (in_array($role, ['farmer','seller'])) { header("Location: farmer_dashboard.php"); exit(); }
                     else { header("Location: buyer_dashboard.php"); exit(); }
                 } else {
                     $error_message = $user ? "Incorrect email or password." : "No account found with that email.";
@@ -107,6 +109,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $result = $stmt->get_result();
                 if ($result->num_rows == 1) {
                     $user = $result->fetch_assoc();
+                    if (!isset($user['role'])) $user['role'] = 'buyer';
                     if (password_verify($password, $user['password'])) {
                         if(($user['is_verified'] ?? 1)==0){
                             resendOTPForLogin($conn,$user,false);
@@ -126,7 +129,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         
                         $role = strtolower($_SESSION['role'] ?? 'buyer');
                         if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); exit(); }
-                        elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+                        elseif (in_array($role, ['farmer','seller'])) { header("Location: farmer_dashboard.php"); exit(); }
                         else { header("Location: buyer_dashboard.php"); exit(); }
                     } else { $error_message = "Incorrect email or password."; }
                 } else { $error_message = "No account found with that email."; }
