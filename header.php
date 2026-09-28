@@ -1,17 +1,22 @@
 <?php
-// FIXED HEADER FOR VERCEL - SESSION + COOKIE RESTORE
-ob_start();
-$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-$secure = $is_https;
-ini_set('session.save_path', sys_get_temp_dir());
-if (PHP_VERSION_ID >= 70300) {
-    session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+// FIXED HEADER - NO WARNING ON VERCEL
+if (session_status() == PHP_SESSION_NONE) {
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $secure = $is_https;
+    @ini_set('session.save_path', sys_get_temp_dir());
+    if (PHP_VERSION_ID >= 70300) {
+        @session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+    } else {
+        @session_set_cookie_params(0, '/', '', $secure, true);
+    }
+    session_start();
 } else {
-    session_set_cookie_params(0, '/', '', $secure, true);
+    // session already started by login.php / farmer_dashboard.php
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $secure = $is_https;
 }
-if (session_status() == PHP_SESSION_NONE) { session_start(); }
 
-// RESTORE FROM COOKIE - VERCEL FIX (laging gawin, hindi lang pag walang session)
+// RESTORE FROM COOKIE - VERCEL FIX
 if (isset($_COOKIE['user_id']) && $_COOKIE['user_id'] != '') {
     if (!isset($_SESSION['user_id'])) {
         $_SESSION['user_id'] = (int)$_COOKIE['user_id'];
@@ -22,16 +27,11 @@ if (isset($_COOKIE['user_id']) && $_COOKIE['user_id'] != '') {
     if (!isset($_SESSION['role']) && isset($_COOKIE['role'])) {
         $_SESSION['role'] = $_COOKIE['role'];
     }
-    // refresh cookie with correct secure flag
-    if (!isset($_COOKIE['user_id']) || $_COOKIE['user_id'] == '') {
-        // nothing
-    } else {
-        setcookie('user_id', (int)$_COOKIE['user_id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
-        if (isset($_COOKIE['user_name'])) setcookie('user_name', $_COOKIE['user_name'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
-        if (isset($_COOKIE['role'])) setcookie('role', $_COOKIE['role'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
-    }
-    
-    // verify user still exists in DB (optional, pero safe)
+    // refresh cookies
+    setcookie('user_id', (int)$_COOKIE['user_id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+    if (isset($_COOKIE['user_name'])) setcookie('user_name', $_COOKIE['user_name'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+    if (isset($_COOKIE['role'])) setcookie('role', $_COOKIE['role'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+
     if (file_exists(__DIR__.'/db_connect.php')) {
         include_once __DIR__.'/db_connect.php';
         if (isset($conn)) {
