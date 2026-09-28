@@ -3,16 +3,34 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role'] ?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = array();
 }
 if (!isset($_SESSION['flash'])) {
     $_SESSION['flash'] = array();
-}
-
-if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_SESSION['loggedin'])) {
-    header('Location: login.php');
-    exit();
 }
 
 $redirect_to = 'cart.php';
@@ -22,16 +40,13 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
     $action = $_POST['action'];
     $input_qty = max(1, (int)($_POST['quantity'] ?? 1));
 
-
     $product_name = null;
     try {
         if ($conn instanceof PDO) {
-         
             $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
             $stmt->execute([$product_id]);
             $product_name = $stmt->fetchColumn();
         } else {
-     
             $stmt = $conn->prepare("SELECT name FROM products WHERE id = ?");
             $stmt->bind_param("i", $product_id);
             $stmt->execute();
@@ -60,7 +75,7 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
         } else {
             $_SESSION['cart'][$product_id] = array('quantity' => $input_qty);
         }
-        $_SESSION['flash']['success'] = $input_qty . " x " . htmlspecialchars($product_name) . " added to cart!";
+        $_SESSION['flash']['success'] = $input_qty . " x " . $product_name . " added to cart!";
         $referer = $_SERVER['HTTP_REFERER'] ?? '';
         if (strpos($referer, 'index.php') !== false) {
             $redirect_to = 'index.php';
@@ -87,6 +102,8 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
         } else {
             if (isset($_SESSION['cart'][$product_id])) {
                 $_SESSION['cart'][$product_id]['quantity'] = $quantity;
+            } else {
+                $_SESSION['cart'][$product_id] = array('quantity' => $quantity);
             }
         }
         $redirect_to = 'cart.php';
@@ -99,7 +116,6 @@ if (isset($_POST['product_id']) && isset($_POST['action'])) {
         $redirect_to = 'cart.php';
     }
 }
-
 
 if (isset($conn)) {
     if ($conn instanceof PDO) {
