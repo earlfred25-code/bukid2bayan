@@ -1,14 +1,15 @@
 <?php
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $is_pdo = $conn instanceof PDO;
 
-// AUTO DETECT HTTPS - para gumana sa localhost http at sa Vercel https
 $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
             || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
 $secure = $is_https; // false sa localhost, true sa Vercel
 
+// restore galing cookie
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     try{
         $uid = (int)$_COOKIE['user_id'];
@@ -25,14 +26,15 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
         }
         if($u){
             $_SESSION['user_id'] = $u['id'];
-            $_SESSION['user_name'] = $u['username'] ?? $u['id'];
-            $_SESSION['username'] = $u['username'] ?? $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['username'] = $u['username'];
             $_SESSION['role'] = $u['role'] ?? 'buyer';
             $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
         }
     }catch(Exception $e){}
 }
 
+// kung naka-login na, wag na pumasok sa login page
 if (isset($_SESSION['user_id'])) {
     $is_admin = $_SESSION['is_admin'] ?? 0;
     $role = $_SESSION['role'] ?? 'buyer';
@@ -51,24 +53,6 @@ function resendOTPForLogin($conn, $user, $is_pdo){
         } else {
             $stmt=$conn->prepare("UPDATE users SET verification_code=?, verification_expires=? WHERE id=?");
             $stmt->bind_param("ssi",$otp,$expires,$user['id']); $stmt->execute(); $stmt->close();
-        }
-        if(file_exists(__DIR__.'/email_config.php')){
-            $config = include __DIR__.'/email_config.php';
-            if(file_exists(__DIR__.'/vendor/autoload.php')){
-                require __DIR__.'/vendor/autoload.php';
-                try{
-                    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-                    $mail->isSMTP(); $mail->Host=$config['host']; $mail->SMTPAuth=true;
-                    $mail->Username=$config['username']; $mail->Password=$config['password'];
-                    $mail->SMTPSecure='tls'; $mail->Port=$config['port'];
-                    $mail->setFrom($config['from_email'],$config['from_name']);
-                    $mail->addAddress($user['email'],$user['username']);
-                    $mail->isHTML(true);
-                    $mail->Subject='Bukid2Bayan - Your Login Code: '.$otp;
-                    $mail->Body="<div style='font-family:Arial;padding:20px'><h2 style='color:#2a9d8f'>Bukid2Bayan</h2><p>Your new verification code is:</p><h1 style='letter-spacing:5px;background:#f5f7f4;padding:12px;border-radius:10px;text-align:center'>$otp</h1><p>Valid for 10 mins.</p></div>";
-                    $mail->send();
-                }catch(Exception $e){}
-            }
         }
     }catch(Exception $e){}
 }
@@ -92,12 +76,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     if($user){ $user['role'] = 'buyer'; $user['is_verified']=1; }
                 }
                 if($user && password_verify($password, $user['password'])){
-                    $is_verified = $user['is_verified'] ?? 1;
-                    if($is_verified==0){
+                    if(($user['is_verified'] ?? 1)==0){
                         resendOTPForLogin($conn,$user,true);
-                        header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified");
-                        exit();
+                        header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified"); exit();
                     }
+                    session_regenerate_id(true);
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_name'] = $user['username'];
                     $_SESSION['username'] = $user['username'];
@@ -109,10 +92,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
                     setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
 
-                    if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
-                    elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); }
-                    else { header("Location: buyer_dashboard.php"); }
-                    exit();
+                    if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); exit(); }
+                    elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+                    else { header("Location: buyer_dashboard.php"); exit(); }
                 } else {
                     $error_message = $user ? "Incorrect email or password." : "No account found with that email.";
                 }
@@ -125,12 +107,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 if ($result->num_rows == 1) {
                     $user = $result->fetch_assoc();
                     if (password_verify($password, $user['password'])) {
-                        $is_verified = $user['is_verified'] ?? 1;
-                        if($is_verified==0){
+                        if(($user['is_verified'] ?? 1)==0){
                             resendOTPForLogin($conn,$user,false);
-                            header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified");
-                            exit();
+                            header("Location: verify.php?email=".urlencode($user['email'])."&reason=not_verified"); exit();
                         }
+                        session_regenerate_id(true);
                         $_SESSION['user_id'] = $user['id'];
                         $_SESSION['user_name'] = $user['username'];
                         $_SESSION['username'] = $user['username'];
@@ -142,10 +123,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
                         setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
                         
-                        if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
-                        elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); }
-                        else { header("Location: buyer_dashboard.php"); }
-                        exit();
+                        if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); exit(); }
+                        elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+                        else { header("Location: buyer_dashboard.php"); exit(); }
                     } else { $error_message = "Incorrect email or password."; }
                 } else { $error_message = "No account found with that email."; }
                 $stmt->close();
@@ -156,64 +136,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 include 'header.php';
 ?>
 <style>
-.login-page{
-    min-height: 85vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px 16px;
-    background:
-        radial-gradient(600px 300px at 10% 10%, rgba(42,157,143,0.18), transparent),
-        radial-gradient(800px 400px at 90% 90%, rgba(34,197,94,0.15), transparent),
-        linear-gradient(180deg, #f7faf6 0%, #eef6f0 100%);
-}
-.form-box{
-    background: rgba(255,255,255,0.88);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(0,0,0,0.06);
-    max-width: 440px;
-    width: 100%;
-    border-radius: 20px;
-    padding: 28px 24px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.06);
-}
-.badge{
-    display:inline-flex; align-items:center; gap:6px;
-    background:#111; color:#fff; padding:6px 12px; border-radius:100px;
-    font-size:0.7rem; font-weight:900; letter-spacing:0.5px; text-transform:uppercase;
-}
-.input-group{ position:relative; margin-bottom:18px; }
-.input-group label{ font-size:0.85rem; font-weight:800; color:#1a2e35; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
-.input-group input{
-    width:100%; padding:14px 44px 14px 14px; font-size:1rem;
-    border:1.8px solid #d1d5db; border-radius:12px; outline:none;
-    transition: all 0.2s; background:#fff;
-}
-.input-group input:focus{ border-color:#2a9d8f; box-shadow:0 0 0 4px rgba(42,157,143,0.15); }
-.eye-btn{
-    position:absolute; right:10px; top:50%; transform:translateY(-10%);
-    background:#f3f4f6; border:none; width:36px; height:36px; border-radius:10px;
-    cursor:pointer; color:#555; display:flex; align-items:center; justify-content:center;
-}
-.submit-btn{
-    width:100%; padding:14px; border-radius:12px; border:none; background:#111; color:#fff;
-    font-weight:900; font-size:1.05rem; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; gap:8px;
-}
-.social-divider{
-    display:flex; align-items:center; gap:12px; margin:20px 0;
-    font-size:0.75rem; font-weight:800; color:#9ca3af; letter-spacing:1px; justify-content:center;
-}
-.social-divider::before, .social-divider::after{
-    content:""; flex:1; height:1px; background:#e5e7eb;
-}
-.social-btn{
-    width:100%; padding:13px; border-radius:12px; border:1.5px solid #e5e7eb;
-    background:#fff; font-weight:800; font-size:0.92rem; display:flex;
-    align-items:center; justify-content:center; gap:10px; text-decoration:none;
-    color:#111; margin-bottom:10px;
-}
-.social-btn.facebook{ background:#1877f2; color:#fff; border-color:#1877f2; }
+.login-page{min-height:85vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:radial-gradient(600px 300px at 10% 10%, rgba(42,157,143,0.18), transparent),radial-gradient(800px 400px at 90% 90%, rgba(34,197,94,0.15), transparent),linear-gradient(180deg, #f7faf6 0%, #eef6f0 100%)}
+.form-box{background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);border:1px solid rgba(0,0,0,0.06);max-width:440px;width:100%;border-radius:20px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.06)}
+.badge{display:inline-flex;align-items:center;gap:6px;background:#111;color:#fff;padding:6px 12px;border-radius:100px;font-size:0.7rem;font-weight:900;letter-spacing:0.5px;text-transform:uppercase}
+.input-group{position:relative;margin-bottom:18px}
+.input-group label{font-size:0.85rem;font-weight:800;color:#1a2e35;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.input-group input{width:100%;padding:14px 44px 14px 14px;font-size:1rem;border:1.8px solid #d1d5db;border-radius:12px;outline:none;transition:all 0.2s;background:#fff}
+.input-group input:focus{border-color:#2a9d8f;box-shadow:0 0 0 4px rgba(42,157,143,0.15)}
+.eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-10%);background:#f3f4f6;border:none;width:36px;height:36px;border-radius:10px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center}
+.submit-btn{width:100%;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;font-weight:900;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.social-divider{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:0.75rem;font-weight:800;color:#9ca3af;letter-spacing:1px;justify-content:center}
+.social-divider::before,.social-divider::after{content:"";flex:1;height:1px;background:#e5e7eb}
+.social-btn{width:100%;padding:13px;border-radius:12px;border:1.5px solid #e5e7eb;background:#fff;font-weight:800;font-size:0.92rem;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;color:#111;margin-bottom:10px}
+.social-btn.facebook{background:#1877f2;color:#fff;border-color:#1877f2}
 </style>
 <div class="login-page">
     <div class="form-box">
