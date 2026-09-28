@@ -1,9 +1,34 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
-session_start();
+if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role'] ?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 include 'header.php';
 $cart = $_SESSION['cart'] ?? [];
+$is_pdo = $conn instanceof PDO;
 ?>
 <style>
 .cart-wrap{ max-width:1120px; margin:20px auto 40px auto; padding:0 16px; }
@@ -44,23 +69,31 @@ $cart = $_SESSION['cart'] ?? [];
       <a href="products.php" style="background:#2d7a3e; color:#fff; padding:12px 24px; border-radius:12px; text-decoration:none; font-weight:800; display:inline-block;">Mamili Na</a>
     </div>
   <?php else:
-    $ids = implode(',', array_map('intval', array_keys($cart)));
-    if($ids == '') $ids = '0';
-    
+    $product_ids = array_map('intval', array_keys($cart));
+    $products = [];
+    $total = 0;
     try {
-        $result = $conn->query("SELECT * FROM products WHERE id IN ($ids)");
-        $products = [];
-        if($result){
-            if(method_exists($result, 'fetch_assoc')){
-                while($r = $result->fetch_assoc()){ $products[] = $r; }
-            } else {
-                $products = $result->fetchAll(PDO::FETCH_ASSOC);
+        if($is_pdo){
+            $placeholders = implode(',', array_fill(0, count($product_ids), '?'));
+            if($placeholders){
+                $stmt = $conn->prepare("SELECT * FROM products WHERE id IN ($placeholders)");
+                $stmt->execute($product_ids);
+                $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+        } else {
+            if(count($product_ids) > 0){
+                $placeholders = implode(',', array_fill(0, count($product_ids), '?'));
+                $types = str_repeat('i', count($product_ids));
+                $stmt = $conn->prepare("SELECT * FROM products WHERE id IN ($placeholders)");
+                $stmt->bind_param($types, ...$product_ids);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                while($r = $res->fetch_assoc()){ $products[] = $r; }
+                $stmt->close();
             }
         }
-        $total = 0;
     } catch(Exception $e){
         $products = [];
-        $total = 0;
         echo '<p style="color:red;">Error: '.htmlspecialchars($e->getMessage()).'</p>';
     }
   ?>
