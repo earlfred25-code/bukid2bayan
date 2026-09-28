@@ -2,13 +2,38 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
-include 'header.php';
-$is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']);
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['username'] = $u['username'];
+            $_SESSION['role'] = $u['role'] ?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+        }
+    }catch(Exception $e){}
+}
+
+$is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_COOKIE['user_id']);
 if(!$is_logged){
     header("Location: login.php"); exit();
 }
-$user_id = $_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? 0;
-$username = $_SESSION['username'] ?? $_SESSION['user']['username'] ?? 'Buyer';
+
+$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? $_COOKIE['user_id'] ?? 0);
+$username = $_SESSION['user_name'] ?? $_SESSION['username'] ?? $_SESSION['user']['username'] ?? $_COOKIE['user_name'] ?? 'Buyer';
 $is_pdo = $conn instanceof PDO;
 $orders = [];
 try{
@@ -27,6 +52,8 @@ try{
         }
     }
 }catch(Exception $e){}
+
+include 'header.php';
 ?>
 <style>
 .dashboard{ max-width:1100px; margin:0 auto; padding:24px 16px; }
@@ -59,8 +86,8 @@ try{
         <?php else: ?>
             <?php foreach($orders as $o): ?>
             <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-                <span>#<?php echo $o['id']; ?> - <?php echo $o['status'] ?? 'pending'; ?></span>
-                <span style="font-weight:700;">₱<?php echo number_format($o['total'] ?? 0,2); ?></span>
+                <span>#<?php echo $o['id']; ?> - <?php echo htmlspecialchars($o['status'] ?? 'pending'); ?></span>
+                <span style="font-weight:700;">₱<?php echo number_format($o['total_amount'] ?? $o['total'] ?? 0,2); ?></span>
             </div>
             <?php endforeach; ?>
         <?php endif; ?>
