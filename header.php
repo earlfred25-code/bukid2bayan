@@ -1,30 +1,65 @@
 <?php
+// FIXED HEADER FOR VERCEL - SESSION + COOKIE RESTORE
+ob_start();
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$secure = $is_https;
+ini_set('session.save_path', sys_get_temp_dir());
+if (PHP_VERSION_ID >= 70300) {
+    session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+} else {
+    session_set_cookie_params(0, '/', '', $secure, true);
+}
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
-if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+
+// RESTORE FROM COOKIE - VERCEL FIX (laging gawin, hindi lang pag walang session)
+if (isset($_COOKIE['user_id']) && $_COOKIE['user_id'] != '') {
+    if (!isset($_SESSION['user_id'])) {
+        $_SESSION['user_id'] = (int)$_COOKIE['user_id'];
+    }
+    if (!isset($_SESSION['user_name']) && isset($_COOKIE['user_name'])) {
+        $_SESSION['user_name'] = $_COOKIE['user_name'];
+    }
+    if (!isset($_SESSION['role']) && isset($_COOKIE['role'])) {
+        $_SESSION['role'] = $_COOKIE['role'];
+    }
+    // refresh cookie with correct secure flag
+    if (!isset($_COOKIE['user_id']) || $_COOKIE['user_id'] == '') {
+        // nothing
+    } else {
+        setcookie('user_id', (int)$_COOKIE['user_id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+        if (isset($_COOKIE['user_name'])) setcookie('user_name', $_COOKIE['user_name'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+        if (isset($_COOKIE['role'])) setcookie('role', $_COOKIE['role'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+    }
+    
+    // verify user still exists in DB (optional, pero safe)
     if (file_exists(__DIR__.'/db_connect.php')) {
         include_once __DIR__.'/db_connect.php';
-        $is_pdo_tmp = isset($conn) && $conn instanceof PDO;
-        $uid_cookie = $_COOKIE['user_id'];
-        try{
-            if($is_pdo_tmp){
-                $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-                $st->execute([$uid_cookie]);
-                $u = $st->fetch(PDO::FETCH_ASSOC);
-            } else {
-                $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-                $st->bind_param("i", $uid_cookie);
-                $st->execute();
-                $u = $st->get_result()->fetch_assoc();
-            }
-            if($u){
-                $_SESSION['user_id'] = $u['id'];
-                $_SESSION['user_name'] = $u['username'];
-                $_SESSION['role'] = $u['role'] ?? 'buyer';
-                $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
-            }
-        }catch(Exception $e){}
+        if (isset($conn)) {
+            $is_pdo_tmp = $conn instanceof PDO;
+            $uid_cookie = (int)$_COOKIE['user_id'];
+            try{
+                if($is_pdo_tmp){
+                    $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+                    $st->execute([$uid_cookie]);
+                    $u = $st->fetch(PDO::FETCH_ASSOC);
+                } else {
+                    $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+                    $st->bind_param("i", $uid_cookie);
+                    $st->execute();
+                    $u = $st->get_result()->fetch_assoc();
+                    $st->close();
+                }
+                if($u){
+                    $_SESSION['user_id'] = $u['id'];
+                    $_SESSION['user_name'] = $u['username'];
+                    $_SESSION['role'] = $u['role'] ?? 'buyer';
+                    $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+                }
+            }catch(Exception $e){}
+        }
     }
 }
+
 $current_page = strtolower(basename($_SERVER['PHP_SELF'] ?? ''));
 $hide_categories = in_array($current_page, ['login.php','register.php']);
 $cart_count = 0;
@@ -35,7 +70,7 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
         else $cart_count += 1;
     }
 }
-$is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']) || isset($_COOKIE['user_id']);
+$is_logged = isset($_SESSION['user_id']) || isset($_COOKIE['user_id']);
 $role = $_SESSION['role'] ?? $_COOKIE['role'] ?? 'buyer';
 $is_farmer = in_array(strtolower($role), ['farmer','seller','admin']);
 
