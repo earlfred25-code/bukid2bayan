@@ -36,8 +36,11 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 $is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']) || isset($_COOKIE['user_id']);
-$cart_link = $is_logged ? 'cart.php' : 'login.php';
-$farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
+$cart_link = 'cart.php';
+$farmer_link = 'farmer_centre.php';
+$sell_link = 'sell.php';
+$account_link = $is_logged ? 'profile.php' : 'login.php';
+$notif_link = $is_logged ? 'notifications.php' : 'login.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -98,11 +101,11 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
             <div class="top-glass-inner">
                 <div style="display:flex; gap:20px;">
                     <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store" style="font-size:0.75rem;"></i> Farmer Centre</a>
-                    <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling" style="font-size:0.75rem;"></i> Sell on BUKID2BAYAN</a>
+                    <a href="<?php echo $sell_link; ?>"><i class="fas fa-seedling" style="font-size:0.75rem;"></i> Sell on BUKID2BAYAN</a>
                 </div>
                 <div style="display:flex; gap:18px; align-items:center;">
                     <?php if($is_logged){ ?><a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a><?php } ?>
-                    <a href="<?php echo $is_logged ? 'notifications.php' : 'login.php'; ?>"><i class="fas fa-bell"></i> Notifications</a>
+                    <a href="<?php echo $notif_link; ?>"><i class="fas fa-bell"></i> Notifications</a>
                     <a href="help.php">Help</a>
                     <?php if ($is_logged) { ?>
                         <span style="font-weight:600; color:#111;">Hi, <?php echo htmlspecialchars($_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer'); ?></span><a href="logout.php">Logout</a>
@@ -125,8 +128,8 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
             <?php } ?>
             <div class="ss-right">
                 <a href="products.php" class="hide-mobile"><i class="fas fa-search" style="font-size:1rem;"></i></a>
-                <a href="<?php echo $is_logged ? 'profile.php' : 'login.php'; ?>" class="hide-mobile"><i class="far fa-user"></i> Account</a>
-                <a href="<?php echo $cart_link; ?>" class="ss-cart"><i class="fas fa-shopping-cart"></i> <span class="hide-mobile">Cart</span> <?php if ($is_logged && $cart_count > 0){ ?><span class="ss-badge"><?php echo $cart_count; ?></span><?php } ?></a>
+                <a href="<?php echo $account_link; ?>" class="hide-mobile"><i class="far fa-user"></i> Account</a>
+                <a href="<?php echo $cart_link; ?>" class="ss-cart"><i class="fas fa-shopping-cart"></i> <span class="hide-mobile">Cart</span> <?php if ($cart_count > 0){ ?><span class="ss-badge"><?php echo $cart_count; ?></span><?php } ?></a>
                 <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')"><i class="fas fa-bars"></i></button>
             </div>
         </div>
@@ -138,14 +141,9 @@ $farmer_link = $is_logged ? 'farmer_centre.php' : 'login.php';
         <a href="products.php?cat=essentials"><i class="fas fa-box"></i> Essentials</a>
         <a href="products.php"><i class="fas fa-search"></i> Search Products</a>
         <?php } ?>
-        <?php if($is_logged){ ?>
-        <a href="profile.php"><i class="fas fa-user-circle"></i> My Account</a>
+        <a href="<?php echo $account_link; ?>"><i class="fas fa-user-circle"></i> My Account</a>
         <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Centre</a>
-        <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
-        <?php } else { ?>
-        <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Centre</a>
-        <a href="<?php echo $is_logged ? 'sell.php' : 'login.php'; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
-        <?php } ?>
+        <a href="<?php echo $sell_link; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
         <a href="<?php echo $cart_link; ?>"><i class="fas fa-shopping-cart"></i> Cart (<?php echo $cart_count; ?>)</a>
         <?php if($is_logged){ ?>
         <a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a>
