@@ -6,12 +6,13 @@ include 'db_connect.php';
 $is_pdo = $conn instanceof PDO;
 $is_pgsql = $is_pdo && $conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
 
+// Restore session from cookie for Vercel serverless
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     $uid_cookie = (int)$_COOKIE['user_id'];
     try{
         if($is_pdo){
             $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-            $st->execute([$uid_cookie]);
+            $st->execute(array($uid_cookie));
             $u = $st->fetch(PDO::FETCH_ASSOC);
         } else {
             $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
@@ -23,8 +24,8 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
         if($u){
             $_SESSION['user_id'] = $u['id'];
             $_SESSION['user_name'] = $u['username'];
-            $_SESSION['role'] = $u['role'] ?? 'buyer';
-            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+            $_SESSION['role'] = isset($u['role']) ? $u['role'] : 'buyer';
+            $_SESSION['is_admin'] = isset($u['is_admin']) ? $u['is_admin'] : 0;
         }
     }catch(Exception $e){}
 }
@@ -32,8 +33,8 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
 if (!isset($_SESSION['user_id']) && !isset($_COOKIE['user_id'])) {
     header('Location: login.php'); exit();
 }
-$user_id = (int)($_SESSION['user_id'] ?? $_COOKIE['user_id'] ?? 0);
-$user_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
+$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($_COOKIE['user_id']) ? (int)$_COOKIE['user_id'] : 0);
+$user_name = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : (isset($_COOKIE['user_name']) ? $_COOKIE['user_name'] : 'Farmer');
 if ($user_id === 0) { header('Location: login.php'); exit(); }
 
 if (!function_exists('addTracking')) {
@@ -43,7 +44,7 @@ if (!function_exists('addTracking')) {
             if($is_pdo){
                 $conn->exec("CREATE TABLE IF NOT EXISTS order_tracking (id SERIAL PRIMARY KEY, order_id INT, status VARCHAR(50), location VARCHAR(255), description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
                 $s=$conn->prepare("INSERT INTO order_tracking (order_id,status,location,description) VALUES (?,?,?,?)");
-                $s->execute([$oid,$status,$loc,$desc]);
+                $s->execute(array($oid,$status,$loc,$desc));
             } else {
                 $conn->query("CREATE TABLE IF NOT EXISTS order_tracking (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, status VARCHAR(50), location VARCHAR(255), description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
                 $s=$conn->prepare("INSERT INTO order_tracking (order_id,status,location,description) VALUES (?,?,?,?)");
@@ -67,20 +68,18 @@ try {
 } catch(Exception $e){}
 
 if (isset($_POST['add_product'])) {
-    $name = trim($_POST['name'] ?? '');
-    $price = (float)($_POST['price'] ?? 0);
-    $unit = trim($_POST['unit'] ?? 'kg');
-    $stock = (int)($_POST['stock'] ?? 0);
-    $category = trim($_POST['category'] ?? 'Gulay');
-    $description = trim($_POST['description'] ?? '');
-    $image = trim($_POST['image_url'] ?? '');
+    $name = isset($_POST['name']) ? trim($_POST['name']) : '';
+    $price = isset($_POST['price']) ? (float)$_POST['price'] : 0;
+    $unit = isset($_POST['unit']) ? trim($_POST['unit']) : 'kg';
+    $stock = isset($_POST['stock']) ? (int)$_POST['stock'] : 0;
+    $category = isset($_POST['category']) ? trim($_POST['category']) : 'Gulay';
+    $description = isset($_POST['description']) ? trim($_POST['description']) : '';
+    $image = isset($_POST['image_url']) ? trim($_POST['image_url']) : '';
 
     if(isset($_FILES['image']) && $_FILES['image']['error'] == 0){
         $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-        if(in_array($ext, ['jpg','jpeg','png','webp'])){
+        if(in_array($ext, array('jpg','jpeg','png','webp'))){
             $newName = 'prod_'.$user_id.'_'.time().'_'.rand(100,999).'.'.$ext;
-            
-            // FIX PARA SA VERCEL - read only filesystem
             if(is_writable(__DIR__)){
                 $uploadDir = __DIR__.'/uploads';
                 @mkdir($uploadDir, 0777, true);
@@ -89,10 +88,9 @@ if (isset($_POST['add_product'])) {
                     $image = 'uploads/'.$newName;
                 }
             } else {
-                // Sa Vercel, i-save as base64 para gumana pa rin
                 $tmpData = @file_get_contents($_FILES['image']['tmp_name']);
                 if($tmpData && strlen($tmpData) < 2097152){
-                    $image = 'data:[STRIPPED].$ext.';base64,'.base64_encode($tmpData);
+                    $image = 'data:image/'.$ext.';base64,'.base64_encode($tmpData);
                 }
             }
         }
@@ -102,13 +100,13 @@ if (isset($_POST['add_product'])) {
         try {
             if($is_pdo){
                 $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock, category, description) VALUES (?,?,?,?,?,?,?,?,?,?)");
-                $stmt->execute([$name,$user_name,$price,$unit,$image,$user_id,$user_id,$stock,$category,$description]);
+                $stmt->execute(array($name,$user_name,$price,$unit,$image,$user_id,$user_id,$stock,$category,$description));
             } else {
                 $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock, category, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->bind_param("ssdssiiiss", $name, $user_name, $price, $unit, $image, $user_id, $user_id, $stock, $category, $description);
                 $stmt->execute(); $stmt->close();
             }
-            $_SESSION['flash']['success'] = "$name na-add na sa Farmer Centre!";
+            $_SESSION['flash']['success'] = $name." na-add na sa Farmer Centre!";
             header('Location: farmer_centre.php'); exit();
         } catch(Exception $e){
             $_SESSION['flash']['success'] = "Error: ".$e->getMessage();
@@ -121,7 +119,7 @@ if (isset($_GET['delete'])) {
     try {
         if($is_pdo){
             $stmt=$conn->prepare("DELETE FROM products WHERE id=? AND (farmer_id=? OR user_id=?)");
-            $stmt->execute([$del_id,$user_id,$user_id]);
+            $stmt->execute(array($del_id,$user_id,$user_id));
         } else {
             $stmt = $conn->prepare("DELETE FROM products WHERE id = ? AND (farmer_id = ? OR user_id = ?)");
             $stmt->bind_param("iii", $del_id, $user_id, $user_id);
@@ -138,20 +136,20 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
         if($is_pdo){
             if($act=='confirm'){
                 $s=$conn->prepare("UPDATE orders SET status='to_ship' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
-                $s->execute([$oid,$user_id]);
+                $s->execute(array($oid,$user_id));
                 addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order');
             } elseif($act=='ship'){
                 $track = 'SPXPH'.rand(1000000000,9999999999);
                 $s=$conn->prepare("UPDATE orders SET status='shipped', tracking_number=?, courier='BUKID2BAYAN Xpress' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
-                $s->execute([$track,$oid,$user_id]);
+                $s->execute(array($track,$oid,$user_id));
                 addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel $track shipped");
             } elseif($act=='complete'){
                 $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
-                $s->execute([$oid,$user_id]);
+                $s->execute(array($oid,$user_id));
                 addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered');
             } elseif($act=='cancel'){
                 $s=$conn->prepare("UPDATE orders SET status='cancelled' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
-                $s->execute([$oid,$user_id]);
+                $s->execute(array($oid,$user_id));
                 addTracking($conn, $oid, 'cancelled', 'Cancelled', 'Order cancelled by farmer');
             }
         } else {
@@ -182,12 +180,13 @@ $total_products = 0; $total_orders = 0; $total_earnings = 0;
 try {
     if($is_pdo){
         $stmt=$conn->prepare("SELECT COUNT(*) FROM products WHERE farmer_id=? OR user_id=?");
-        $stmt->execute([$user_id,$user_id]);
+        $stmt->execute(array($user_id,$user_id));
         $total_products = (int)$stmt->fetchColumn();
         $stmt=$conn->prepare("SELECT COUNT(DISTINCT order_id) as c, SUM(price*quantity) as total FROM order_items WHERE farmer_id=?");
-        $stmt->execute([$user_id]);
+        $stmt->execute(array($user_id));
         $r=$stmt->fetch(PDO::FETCH_ASSOC);
-        $total_orders = $r['c'] ?? 0; $total_earnings = $r['total'] ?? 0;
+        $total_orders = isset($r['c']) ? $r['c'] : 0; 
+        $total_earnings = isset($r['total']) ? $r['total'] : 0;
     } else {
         $stmt = $conn->prepare("SELECT COUNT(*) as c FROM products WHERE farmer_id = ? OR user_id = ?");
         $stmt->bind_param("ii", $user_id, $user_id);
@@ -195,13 +194,13 @@ try {
         if($res) $total_products=$res->fetch_assoc()['c']; $stmt->close();
         $stmt = $conn->prepare("SELECT COUNT(DISTINCT order_id) as c, SUM(price*quantity) as total FROM order_items WHERE farmer_id=?");
         $stmt->bind_param("i",$user_id); $stmt->execute(); $res=$stmt->get_result();
-        if($res){ $r=$res->fetch_assoc(); $total_orders=$r['c']??0; $total_earnings=$r['total']??0; }
+        if($res){ $r=$res->fetch_assoc(); $total_orders=isset($r['c'])?$r['c']:0; $total_earnings=isset($r['total'])?$r['total']:0; }
         $stmt->close();
     }
 } catch(Exception $e){}
 
-$filter = $_GET['filter'] ?? 'all';
-$allowed = ['all','pending','to_ship','shipped','completed','cancelled'];
+$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
+$allowed = array('all','pending','to_ship','shipped','completed','cancelled');
 if(!in_array($filter,$allowed)) $filter='all';
 include 'header.php';
 ?>
@@ -215,22 +214,22 @@ include 'header.php';
 <div class="fc-wrap">
     <?php if (isset($_SESSION['flash']['success'])): ?>
         <div style="background:#e6f7f5; border:1.5px solid #2a9d8f; color:#0f3d37; padding:14px; border-radius:10px; margin-bottom:18px; text-align:center; font-weight:700;">
-            <?= htmlspecialchars($_SESSION['flash']['success']); unset($_SESSION['flash']['success']); ?>
+            <?php echo htmlspecialchars($_SESSION['flash']['success']); unset($_SESSION['flash']['success']); ?>
         </div>
     <?php endif; ?>
     <div style="background:#fff; border:1px solid #e5e5e5; border-radius:16px; padding:28px; margin-bottom:20px;">
         <h1 style="font-size:clamp(1.6rem,4vw,2.4rem); font-weight:900; margin:0;"><i class="fas fa-store" style="color:#2a9d8f;"></i> Farmer Centre</h1>
-        <p style="color:#666; margin-top:8px;">Welcome, <?= htmlspecialchars($user_name) ?>!</p>
+        <p style="color:#666; margin-top:8px;">Welcome, <?php echo htmlspecialchars($user_name); ?>!</p>
     </div>
     <div class="fc-stats">
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#2a9d8f;"><?= $total_products ?></p><p style="font-weight:800;">My Products</p>
+            <p style="font-size:2rem; font-weight:900; margin:0; color:#2a9d8f;"><?php echo $total_products; ?></p><p style="font-weight:800;">My Products</p>
         </div>
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#e76f51;"><?= $total_orders ?></p><p style="font-weight:800;">Total Orders</p>
+            <p style="font-size:2rem; font-weight:900; margin:0; color:#e76f51;"><?php echo $total_orders; ?></p><p style="font-weight:800;">Total Orders</p>
         </div>
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#1a2e35;">₱<?= number_format($total_earnings, 2) ?></p><p style="font-weight:800;">Earnings</p>
+            <p style="font-size:2rem; font-weight:900; margin:0; color:#1a2e35;">P<?php echo number_format($total_earnings, 2); ?></p><p style="font-weight:800;">Earnings</p>
         </div>
     </div>
     <div class="fc-tabs">
@@ -246,14 +245,14 @@ include 'header.php';
         <h3 style="font-weight:900; margin:0 0 14px 0;">Incoming Orders</h3>
         <?php
         try {
-            $rows=[];
+            $rows=array();
             if($is_pdo){
                 if($filter=='all'){
                     $s=$conn->prepare("SELECT o.id, o.customer_name, o.phone, o.address, o.payment_method, o.status, o.tracking_number, o.created_at, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? ORDER BY o.id DESC LIMIT 50");
-                    $s->execute([$user_id]);
+                    $s->execute(array($user_id));
                 } else {
                     $s=$conn->prepare("SELECT o.id, o.customer_name, o.phone, o.address, o.payment_method, o.status, o.tracking_number, o.created_at, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? AND o.status=? ORDER BY o.id DESC LIMIT 50");
-                    $s->execute([$user_id,$filter]);
+                    $s->execute(array($user_id,$filter));
                 }
                 $rows=$s->fetchAll(PDO::FETCH_ASSOC);
             } else {
@@ -276,7 +275,7 @@ include 'header.php';
                     $badge=$status=='pending'?'#ff9800':($status=='to_ship'?'#2196f3':($status=='shipped'?'#9c27b0':($status=='completed'?'#00b050':'#999')));
                     echo '<div style="display:flex; justify-content:space-between; gap:12px; border:1px solid #eee; border-radius:10px; padding:12px; margin-bottom:10px; flex-wrap:wrap;"><div><b>Order #'.$r['id'].' - '.htmlspecialchars($r['product_name']).' x '.$r['quantity'].'</b> <span style="background:'.$badge.'; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:800;">'.$status.'</span>';
                     if(!empty($r['tracking_number'])) echo '<span style="background:#111; color:#fff; padding:2px 8px; border-radius:8px; font-size:0.7rem; margin-left:4px;">'.$r['tracking_number'].'</span>';
-                    echo '<br><span style="font-size:0.85rem; color:#333;">'.htmlspecialchars($r['customer_name']).' - '.htmlspecialchars($r['phone']).'</span></div><div style="text-align:right; min-width:160px;"><b>₱'.number_format($r['price']*$r['quantity'],2).'</b><br>';
+                    echo '<br><span style="font-size:0.85rem; color:#333;">'.htmlspecialchars($r['customer_name']).' - '.htmlspecialchars($r['phone']).'</span></div><div style="text-align:right; min-width:160px;"><b>P'.number_format($r['price']*$r['quantity'],2).'</b><br>';
                     if($status=='pending') echo '<a href="farmer_centre.php?action=confirm&id='.$r['id'].'" style="background:#2a9d8f; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Confirm</a>';
                     elseif($status=='to_ship') echo '<a href="farmer_centre.php?action=ship&id='.$r['id'].'" style="background:#111; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Ship Now</a>';
                     elseif($status=='shipped') echo '<a href="farmer_centre.php?action=complete&id='.$r['id'].'" style="background:#00b050; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; display:block; text-align:center; margin-top:6px;">Mark Completed</a>';
@@ -306,10 +305,10 @@ include 'header.php';
             try {
                 if($is_pdo){
                     $stmt=$conn->prepare("SELECT id, name, price, unit FROM products WHERE farmer_id=? OR user_id=? ORDER BY id DESC");
-                    $stmt->execute([$user_id,$user_id]);
+                    $stmt->execute(array($user_id,$user_id));
                     $result=$stmt->fetchAll(PDO::FETCH_ASSOC);
                     foreach($result as $row){
-                        echo '<div style="display:flex; gap:12px; align-items:center; border:1px solid #eee; border-radius:12px; padding:10px;"><div style="flex:1;"><b>'.htmlspecialchars($row['name']).'</b><br>₱'.number_format($row['price'],2).'</div><a href="farmer_centre.php?delete='.$row['id'].'" onclick="return confirm(\'Tanggalin?\')" style="color:#c00; font-weight:800; text-decoration:none; padding:8px 12px; border:1px solid #fcc; border-radius:8px;">Delete</a></div>';
+                        echo '<div style="display:flex; gap:12px; align-items:center; border:1px solid #eee; border-radius:12px; padding:10px;"><div style="flex:1;"><b>'.htmlspecialchars($row['name']).'</b><br>P'.number_format($row['price'],2).'</div><a href="farmer_centre.php?delete='.$row['id'].'" onclick="return confirm(\'Tanggalin?\')" style="color:#c00; font-weight:800; text-decoration:none; padding:8px 12px; border:1px solid #fcc; border-radius:8px;">Delete</a></div>';
                     }
                     if(count($result)==0) echo '<p style="color:#666; text-align:center; padding:20px;">Wala ka pa product.</p>';
                 } else {
@@ -317,7 +316,7 @@ include 'header.php';
                     $stmt->bind_param("ii", $user_id, $user_id);
                     $stmt->execute(); $result = $stmt->get_result();
                     while($row = $result->fetch_assoc()) {
-                        echo '<div style="display:flex; gap:12px; align-items:center; border:1px solid #eee; border-radius:12px; padding:10px;"><div style="flex:1;"><b>'.htmlspecialchars($row['name']).'</b><br>₱'.number_format($row['price'],2).'</div><a href="farmer_centre.php?delete='.$row['id'].'" onclick="return confirm(\'Tanggalin?\')" style="color:#c00; font-weight:800; text-decoration:none; padding:8px 12px; border:1px solid #fcc; border-radius:8px;">Delete</a></div>';
+                        echo '<div style="display:flex; gap:12px; align-items:center; border:1px solid #eee; border-radius:12px; padding:10px;"><div style="flex:1;"><b>'.htmlspecialchars($row['name']).'</b><br>P'.number_format($row['price'],2).'</div><a href="farmer_centre.php?delete='.$row['id'].'" onclick="return confirm(\'Tanggalin?\')" style="color:#c00; font-weight:800; text-decoration:none; padding:8px 12px; border:1px solid #fcc; border-radius:8px;">Delete</a></div>';
                     }
                     $stmt->close();
                 }
