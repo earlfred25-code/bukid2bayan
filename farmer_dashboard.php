@@ -7,40 +7,27 @@ if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $is_pdo = $conn instanceof PDO;
 $is_pgsql = $is_pdo && $conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
+
+if (isset($_COOKIE['user_id'])) {
+    $_SESSION['user_id'] = (int)$_COOKIE['user_id'];
+    $_SESSION['user_name'] = isset($_COOKIE['user_name']) ? $_COOKIE['user_name'] : (isset($_SESSION['user_name']) ? $_SESSION['user_name'] : 'Farmer');
+    $_SESSION['role'] = isset($_COOKIE['role']) ? $_COOKIE['role'] : (isset($_SESSION['role']) ? $_SESSION['role'] : 'farmer');
+    setcookie('user_id', $_COOKIE['user_id'], time()+60*60*24*30, '/');
+    if (isset($_COOKIE['user_name'])) setcookie('user_name', $_COOKIE['user_name'], time()+60*60*24*30, '/');
+    if (isset($_COOKIE['role'])) setcookie('role', $_COOKIE['role'], time()+60*60*24*30, '/');
+}
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
-    $uid_cookie = (int)$_COOKIE['user_id'];
-    $_SESSION['user_id'] = $uid_cookie;
-    $_SESSION['user_name'] = isset($_COOKIE['user_name']) ? $_COOKIE['user_name'] : 'Farmer';
-    $_SESSION['role'] = isset($_COOKIE['role']) ? $_COOKIE['role'] : 'farmer';
-    try{
-        if($is_pdo){
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-            $st->execute(array($uid_cookie));
-            $u = $st->fetch(PDO::FETCH_ASSOC);
-        } else {
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-            $st->bind_param("i", $uid_cookie);
-            $st->execute();
-            $u = $st->get_result()->fetch_assoc();
-            $st->close();
-        }
-        if($u){
-            $_SESSION['user_id'] = $u['id'];
-            $_SESSION['user_name'] = $u['username'];
-            $_SESSION['role'] = isset($u['role']) ? $u['role'] : 'farmer';
-            $_SESSION['is_admin'] = isset($u['is_admin']) ? $u['is_admin'] : 0;
-        }
-    }catch(Exception $e){}
+    $_SESSION['user_id'] = (int)$_COOKIE['user_id'];
 }
 if (!isset($_SESSION['user_id']) && !isset($_COOKIE['user_id'])) {
-    header("Location: login.php"); exit();
+    header("Location: login.php?reason=no_session_no_cookie"); exit();
 }
 $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($_COOKIE['user_id']) ? (int)$_COOKIE['user_id'] : 0);
 $user_name = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : (isset($_COOKIE['user_name']) ? $_COOKIE['user_name'] : 'Farmer');
-if ($user_id === 0) {
-    setcookie('user_id','',time()-3600,'/');
-    header("Location: login.php"); exit();
+if ($user_id == 0) {
+    header("Location: login.php?reason=zero_id"); exit();
 }
+
 function addTracking($conn, $oid, $status, $loc, $desc){
     try {
         $is_pdo = $conn instanceof PDO;
@@ -184,25 +171,37 @@ if(!in_array($filter,$allowed)) $filter='all';
 $tab = isset($_GET['tab']) ? $_GET['tab'] : 'products';
 if(!in_array($tab, array('products','orders','add'))) $tab='products';
 if(isset($_GET['msg'])) { $message = $_GET['msg']; }
-include 'header.php';
 ?>
-<div style="max-width:1220px; margin:0 auto; padding:16px;">
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Farmer Dashboard</title>
+<style>
+body{font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f6faf6; margin:0;}
+.topbar{background:#111; color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center;}
+.topbar a{color:#fff; text-decoration:none; font-weight:700; margin-left:12px;}
+.fd-wrap{max-width:1220px; margin:0 auto; padding:16px;}
+.fd-hero{background: linear-gradient(135deg,#1a2e35 0%,#2a9d8f 100%); color:#fff; border-radius:20px; padding:24px; margin-bottom:16px;}
+.fd-nav{background:#fff; border-radius:16px; padding:8px; display:flex; gap:8px; margin-bottom:16px; border:1px solid #e5e5e5;}
+.fd-nav a{flex:1; text-align:center; padding:12px; border-radius:12px; text-decoration:none; font-weight:800;}
+.fd-nav a.active{background:#111; color:#fff;} .fd-nav a:not(.active){background:#f5f7f5; color:#333;}
+.fd-card{background:#fff; border-radius:16px; border:1px solid #e5e5e5; padding:18px; margin-bottom:16px;}
+</style></head><body>
+<div class="topbar"><div>🌾 Bukid2Bayan - Farmer</div><div><a href="index.php">Home</a><a href="logout.php">Logout</a></div></div>
+<div class="fd-wrap">
     <?php if($message):?><div style="background:#e6f7f5; border:1.5px solid #2a9d8f; padding:14px; border-radius:12px; margin-bottom:14px; text-align:center; font-weight:800;"><?php echo htmlspecialchars($message);?></div><?php endif;?>
-    <div style="background: linear-gradient(135deg,#1a2e35 0%,#2a9d8f 100%); color:#fff; border-radius:20px; padding:24px; margin-bottom:16px;"><h1>Hi, <?php echo htmlspecialchars($user_name);?>!</h1><p>ID: <?php echo $user_id;?></p></div>
+    <div class="fd-hero"><h1 style="margin:0;">Hi, <?php echo htmlspecialchars($user_name);?>!</h1><p style="margin:6px 0 0 0; opacity:0.9;">ID: <?php echo $user_id;?> | Session: <?php echo isset($_SESSION['user_id']) ? 'OK' : 'NO';?> | Cookie: <?php echo isset($_COOKIE['user_id']) ? 'OK' : 'NO';?></p></div>
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px;">
-        <div style="background:#fff; border-radius:16px; padding:16px; text-align:center; border:1px solid #eee;">Products<br><b style="font-size:1.7rem; color:#2a9d8f;"><?php echo $total_products;?></b></div>
-        <div style="background:#fff; border-radius:16px; padding:16px; text-align:center; border:1px solid #eee;">Pending<br><b style="font-size:1.7rem; color:#f59e0b;"><?php echo $pending_orders;?></b></div>
-        <div style="background:#fff; border-radius:16px; padding:16px; text-align:center; border:1px solid #eee;">Orders<br><b style="font-size:1.7rem; color:#e76f51;"><?php echo $total_orders;?></b></div>
-        <div style="background:#fff; border-radius:16px; padding:16px; text-align:center; border:1px solid #eee;">Earnings<br><b>₱<?php echo number_format($total_earnings,2);?></b></div>
+        <div class="fd-card" style="text-align:center;">Products<br><b style="font-size:1.7rem; color:#2a9d8f;"><?php echo $total_products;?></b></div>
+        <div class="fd-card" style="text-align:center;">Pending<br><b style="font-size:1.7rem; color:#f59e0b;"><?php echo $pending_orders;?></b></div>
+        <div class="fd-card" style="text-align:center;">Orders<br><b style="font-size:1.7rem; color:#e76f51;"><?php echo $total_orders;?></b></div>
+        <div class="fd-card" style="text-align:center;">Earnings<br><b>₱<?php echo number_format($total_earnings,2);?></b></div>
     </div>
-    <div style="background:#fff; border-radius:16px; padding:8px; display:flex; gap:8px; margin-bottom:16px; border:1px solid #e5e5e5;">
-        <a href="farmer_dashboard.php?tab=products" style="flex:1; text-align:center; padding:12px; border-radius:12px; text-decoration:none; font-weight:800; <?php echo $tab=='products'?'background:#111; color:#fff;':'background:#f5f7f5; color:#333;';?>">Products</a>
-        <a href="farmer_dashboard.php?tab=orders&filter=all" style="flex:1; text-align:center; padding:12px; border-radius:12px; text-decoration:none; font-weight:800; <?php echo $tab=='orders'?'background:#111; color:#fff;':'background:#f5f7f5; color:#333;';?>">Orders <?php if($pending_orders>0) echo '('.$pending_orders.')';?></a>
-        <a href="farmer_dashboard.php?tab=add" style="flex:1; text-align:center; padding:12px; border-radius:12px; text-decoration:none; font-weight:800; <?php echo $tab=='add'?'background:#111; color:#fff;':'background:#f5f7f5; color:#333;';?>">Add Product</a>
+    <div class="fd-nav">
+        <a href="farmer_dashboard.php?tab=products" class="<?php echo $tab=='products'?'active':'';?>">📦 Products</a>
+        <a href="farmer_dashboard.php?tab=orders&filter=all" class="<?php echo $tab=='orders'?'active':'';?>">📋 Orders <?php if($pending_orders>0) echo '('.$pending_orders.')';?></a>
+        <a href="farmer_dashboard.php?tab=add" class="<?php echo $tab=='add'?'active':'';?>">➕ Add Product</a>
     </div>
     <?php if($tab=='products'):?>
-    <div style="background:#fff; border-radius:16px; border:1px solid #e5e5e5; padding:18px;">
-        <h3>My Products (<?php echo $total_products;?>)</h3>
+    <div class="fd-card"><h3>My Products (<?php echo $total_products;?>)</h3>
         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px;">
         <?php foreach($my_products as $p): $img = $p['image_url']; if(empty($img)) $img = 'https://via.placeholder.com/300?text='.urlencode($p['name']);?>
             <div style="border:1px solid #eee; border-radius:14px; overflow:hidden;">
@@ -215,8 +214,7 @@ include 'header.php';
     </div>
     <?php endif;?>
     <?php if($tab=='orders'):?>
-    <div style="background:#fff; border-radius:16px; border:1px solid #e5e5e5; padding:18px;">
-        <h3>Incoming Orders</h3>
+    <div class="fd-card"><h3>Incoming Orders</h3>
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
             <?php foreach($allowed as $k){ $label = $k=='all' ? 'All' : ucwords(str_replace('_',' ',$k)); $active = $filter==$k ? 'background:#111; color:#fff;' : 'background:#f5f5f5; color:#333; border:1px solid #eee;'; echo "<a href='farmer_dashboard.php?tab=orders&filter=$k' style='padding:8px 14px; border-radius:20px; text-decoration:none; font-weight:800; font-size:0.8rem; $active'>$label</a>"; }?>
         </div>
@@ -242,14 +240,14 @@ include 'header.php';
                 }
                 $s->execute(); $res=$s->get_result(); if($res) while($r=$res->fetch_assoc()) $rows[]=$r; $s->close();
             }
-            if(count($rows)==0){ echo '<p style="text-align:center; color:#666;">Walang order sa '.$filter.' tab.</p>'; }
+            if(count($rows)==0){ echo '<p style="text-align:center; color:#666;">Walang order sa '.$filter.' tab. ID mo: '.$user_id.'</p>'; }
             else {
                 foreach($rows as $r){
                     $status=$r['status']; $badge=$status=='pending'?'#ff9800':($status=='to_ship'?'#2196f3':($status=='shipped'?'#9c27b0':($status=='completed'?'#00b050':'#999')));
                     echo '<div style="border:1px solid #eee; border-radius:12px; padding:12px; margin-bottom:10px; display:flex; justify-content:space-between;"><div><b>Order #'.$r['id'].' - '.htmlspecialchars($r['product_name']).' x '.$r['quantity'].'</b> <span style="background:'.$badge.'; color:#fff; padding:3px 10px; border-radius:20px; font-size:0.7rem;">'.$status.'</span><br><span style="font-size:0.85rem;">'.htmlspecialchars($r['customer_name']).' - '.htmlspecialchars($r['phone']).'</span></div><div><b>P'.number_format($r['price']*$r['quantity'],2).'</b><br>';
-                    if($status=='pending') echo '<a href="farmer_dashboard.php?action=confirm&id='.$r['id'].'" style="background:#2a9d8f; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Confirm Order</a>';
+                    if($status=='pending') echo '<a href="farmer_dashboard.php?action=confirm&id='.$r['id'].'" style="background:#2a9d8f; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Confirm</a>';
                     elseif($status=='to_ship') echo '<a href="farmer_dashboard.php?action=ship&id='.$r['id'].'" style="background:#111; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Ship Now</a>';
-                    elseif($status=='shipped') echo '<a href="farmer_dashboard.php?action=complete&id='.$r['id'].'" style="background:#00b050; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; display:block; text-align:center; margin-top:6px;">Mark Delivered</a>';
+                    elseif($status=='shipped') echo '<a href="farmer_dashboard.php?action=complete&id='.$r['id'].'" style="background:#00b050; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; display:block; text-align:center; margin-top:6px;">Delivered</a>';
                     echo '</div></div>';
                 }
             }
@@ -258,8 +256,7 @@ include 'header.php';
     </div>
     <?php endif;?>
     <?php if($tab=='add'):?>
-    <div style="background:#fff; border-radius:16px; border:1px solid #e5e5e5; padding:18px;">
-        <h3>Magdagdag ng Bagong Product</h3>
+    <div class="fd-card"><h3>Magdagdag ng Bagong Product</h3>
         <form method="post" enctype="multipart/form-data">
             <input type="text" name="name" required placeholder="Product Name" style="width:100%; padding:12px; border:1.5px solid #ddd; border-radius:10px; margin-bottom:10px;">
             <input type="number" step="0.01" name="price" required placeholder="Price" style="width:100%; padding:12px; border:1.5px solid #ddd; border-radius:10px; margin-bottom:10px;">
@@ -271,4 +268,4 @@ include 'header.php';
     </div>
     <?php endif;?>
 </div>
-<?php include 'footer.php';?>
+</body></html>
