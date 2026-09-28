@@ -3,21 +3,30 @@ if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $is_pdo = $conn instanceof PDO;
 
+// AUTO DETECT HTTPS - para gumana sa localhost http at sa Vercel https
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
+            || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$secure = $is_https; // false sa localhost, true sa Vercel
+
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     try{
         $uid = (int)$_COOKIE['user_id'];
         if($is_pdo){
-            $st = $conn->prepare("SELECT id, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
             $st->execute([$uid]);
             $u = $st->fetch(PDO::FETCH_ASSOC);
         } else {
-            $st = $conn->prepare("SELECT id, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
             $st->bind_param("i", $uid);
             $st->execute();
             $u = $st->get_result()->fetch_assoc();
+            $st->close();
         }
         if($u){
             $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'] ?? $u['id'];
+            $_SESSION['username'] = $u['username'] ?? $u['id'];
             $_SESSION['role'] = $u['role'] ?? 'buyer';
             $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
         }
@@ -28,7 +37,7 @@ if (isset($_SESSION['user_id'])) {
     $is_admin = $_SESSION['is_admin'] ?? 0;
     $role = $_SESSION['role'] ?? 'buyer';
     if ($is_admin == 1) { header("Location: admin/index.php"); exit(); }
-    elseif ($role === 'farmer') { header("Location: farmer_dashboard.php"); exit(); }
+    elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
     else { header("Location: buyer_dashboard.php"); exit(); }
 }
 
@@ -41,7 +50,7 @@ function resendOTPForLogin($conn, $user, $is_pdo){
             $conn->prepare("UPDATE users SET verification_code=?, verification_expires=? WHERE id=?")->execute([$otp,$expires,$user['id']]);
         } else {
             $stmt=$conn->prepare("UPDATE users SET verification_code=?, verification_expires=? WHERE id=?");
-            $stmt->bind_param("ssi",$otp,$expires,$user['id']); $stmt->execute();
+            $stmt->bind_param("ssi",$otp,$expires,$user['id']); $stmt->execute(); $stmt->close();
         }
         if(file_exists(__DIR__.'/email_config.php')){
             $config = include __DIR__.'/email_config.php';
@@ -80,7 +89,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $stmt = $conn->prepare("SELECT id, username, password, email, is_admin FROM users WHERE email = ? LIMIT 1");
                     $stmt->execute([$email]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
-                    $user['role'] = 'buyer'; $user['is_verified']=1;
+                    if($user){ $user['role'] = 'buyer'; $user['is_verified']=1; }
                 }
                 if($user && password_verify($password, $user['password'])){
                     $is_verified = $user['is_verified'] ?? 1;
@@ -94,20 +103,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
                     $_SESSION['role'] = $user['role'] ?? 'buyer';
-                    setcookie('user_id', $user['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
-                    setcookie('user_name', $user['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
-                    setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
-                    setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                    
+                    setcookie('user_id', $user['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+                    setcookie('user_name', $user['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+                    setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+                    setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+
                     if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
-                    elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_dashboard.php"); }
+                    elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); }
                     else { header("Location: buyer_dashboard.php"); }
                     exit();
                 } else {
                     $error_message = $user ? "Incorrect email or password." : "No account found with that email.";
                 }
             } else {
-                $stmt = $conn->prepare("SELECT id, username, password, email, is_admin, role, is_verified FROM users WHERE email = ?");
-                if (!$stmt) { $stmt = $conn->prepare("SELECT id, username, password, email, is_admin FROM users WHERE email = ?"); }
+                $stmt = $conn->prepare("SELECT id, username, password, email, is_admin, role, is_verified FROM users WHERE email = ? LIMIT 1");
+                if (!$stmt) { $stmt = $conn->prepare("SELECT id, username, password, email, is_admin FROM users WHERE email = ? LIMIT 1"); }
                 $stmt->bind_param("s", $email);
                 $stmt->execute();
                 $result = $stmt->get_result();
@@ -125,12 +136,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
                         $_SESSION['role'] = $user['role'] ?? 'buyer';
-                        setcookie('user_id', $user['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
-                        setcookie('user_name', $user['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
-                        setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
-                        setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>true,'httponly'=>false,'samesite'=>'Lax']);
+                        
+                        setcookie('user_id', $user['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+                        setcookie('user_name', $user['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+                        setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+                        setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
+                        
                         if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); }
-                        elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_dashboard.php"); }
+                        elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); }
                         else { header("Location: buyer_dashboard.php"); }
                         exit();
                     } else { $error_message = "Incorrect email or password."; }
@@ -221,6 +234,11 @@ include 'header.php';
         <?php if(isset($_GET['verified'])): ?>
             <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; font-weight:700;">
                 <i class="fas fa-check-circle"></i> Email verified! You can now login.
+            </div>
+        <?php endif; ?>
+        <?php if(isset($_GET['registered'])): ?>
+            <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; font-weight:700;">
+                <i class="fas fa-check-circle"></i> Account created! Please login.
             </div>
         <?php endif; ?>
         <form action="login.php" method="post">
