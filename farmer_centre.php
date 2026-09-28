@@ -1,4 +1,5 @@
 <?php
+ob_start();
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
@@ -29,17 +30,11 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
 }
 
 if (!isset($_SESSION['user_id']) && !isset($_COOKIE['user_id'])) {
-    header('Location: login.php');
-    exit();
+    header('Location: login.php'); exit();
 }
-
 $user_id = (int)($_SESSION['user_id'] ?? $_COOKIE['user_id'] ?? 0);
 $user_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
-
-if ($user_id === 0) {
-    header('Location: login.php');
-    exit();
-}
+if ($user_id === 0) { header('Location: login.php'); exit(); }
 
 if (!function_exists('addTracking')) {
     function addTracking($conn, $oid, $status, $loc, $desc){
@@ -81,14 +76,24 @@ if (isset($_POST['add_product'])) {
     $image = trim($_POST['image_url'] ?? '');
 
     if(isset($_FILES['image']) && $_FILES['image']['error'] == 0){
-        $uploadDir = __DIR__.'/uploads';
-        if(!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
         $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
         if(in_array($ext, ['jpg','jpeg','png','webp'])){
             $newName = 'prod_'.$user_id.'_'.time().'_'.rand(100,999).'.'.$ext;
-            $dest = $uploadDir.'/'.$newName;
-            if(move_uploaded_file($_FILES['image']['tmp_name'], $dest)){
-                $image = 'uploads/'.$newName;
+            
+            // FIX PARA SA VERCEL - read only filesystem
+            if(is_writable(__DIR__)){
+                $uploadDir = __DIR__.'/uploads';
+                @mkdir($uploadDir, 0777, true);
+                $dest = $uploadDir.'/'.$newName;
+                if(@move_uploaded_file($_FILES['image']['tmp_name'], $dest)){
+                    $image = 'uploads/'.$newName;
+                }
+            } else {
+                // Sa Vercel, i-save as base64 para gumana pa rin
+                $tmpData = @file_get_contents($_FILES['image']['tmp_name']);
+                if($tmpData && strlen($tmpData) < 2097152){
+                    $image = 'data:[STRIPPED].$ext.';base64,'.base64_encode($tmpData);
+                }
             }
         }
     }
@@ -105,7 +110,9 @@ if (isset($_POST['add_product'])) {
             }
             $_SESSION['flash']['success'] = "$name na-add na sa Farmer Centre!";
             header('Location: farmer_centre.php'); exit();
-        } catch(Exception $e){}
+        } catch(Exception $e){
+            $_SESSION['flash']['success'] = "Error: ".$e->getMessage();
+        }
     }
 }
 
