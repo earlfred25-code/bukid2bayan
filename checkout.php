@@ -3,16 +3,38 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 
-if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_SESSION['loggedin'])) {
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role'] ?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+        }
+    }catch(Exception $e){}
+}
+
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_COOKIE['user_id'])) {
     header('Location: login.php'); exit();
 }
 if (empty($_SESSION['cart'])) {
     header('Location: cart.php'); exit();
 }
 
-$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? 0);
-$user_name = $_SESSION['user_name'] ?? $_SESSION['user']['name'] ?? '';
-
+$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? $_COOKIE['user_id'] ?? 0);
+$user_name = $_SESSION['user_name'] ?? $_SESSION['user']['name'] ?? $_COOKIE['user_name'] ?? '';
 
 $is_pdo = $conn instanceof PDO;
 $is_pgsql = $is_pdo && $conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
@@ -61,24 +83,29 @@ try {
             farmer_id INT NULL
         )");
     }
-} catch(Exception $e){ /* ignore kung existing na */ }
+} catch(Exception $e){}
 
 $cart = $_SESSION['cart'];
 $ids = array_map('intval', array_keys($cart));
 $products = []; $subtotal = 0;
 
 if(!empty($ids)){
-    $in = implode(',', $ids);
     try {
-        $res = $conn->query("SELECT id, name, price, farmer_id, user_id FROM products WHERE id IN ($in)");
-        if($res){
-            $rows = [];
-            if(method_exists($res, 'fetch_assoc')){
-                while($r=$res->fetch_assoc()) $rows[] = $r;
-            } else {
-                $rows = $res->fetchAll(PDO::FETCH_ASSOC);
-            }
+        if($is_pdo){
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $conn->prepare("SELECT id, name, price, farmer_id, user_id FROM products WHERE id IN ($ph)");
+            $stmt->execute($ids);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach($rows as $r){ $products[$r['id']] = $r; }
+        } else {
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $types = str_repeat('i', count($ids));
+            $stmt = $conn->prepare("SELECT id, name, price, farmer_id, user_id FROM products WHERE id IN ($ph)");
+            $stmt->bind_param($types, ...$ids);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            while($r=$res->fetch_assoc()){ $products[$r['id']] = $r; }
+            $stmt->close();
         }
         foreach($cart as $pid=>$data){
             $qty = is_array($data) ? ($data['quantity'] ?? 1) : (int)$data;
