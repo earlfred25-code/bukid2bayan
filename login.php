@@ -1,17 +1,18 @@
 <?php
 ob_start();
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$secure = $is_https;
 ini_set('session.save_path', sys_get_temp_dir());
+if (PHP_VERSION_ID >= 70300) {
+    session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+} else {
+    session_set_cookie_params(0, '/', '', $secure, true);
+}
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $is_pdo = $conn instanceof PDO;
 
-$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
-            || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
-            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-$secure = $is_https;
-
-// RESTORE FROM COOKIE - VERCEL FIX
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     try{
         $uid = (int)$_COOKIE['user_id'];
@@ -36,7 +37,6 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     }catch(Exception $e){}
 }
 
-// KUNG NAKA-LOGIN NA - REDIRECT AGAD SA TAMANG DASHBOARD
 if (isset($_SESSION['user_id'])) {
     $is_admin = $_SESSION['is_admin'] ?? 0;
     $role = strtolower($_SESSION['role'] ?? 'buyer');
@@ -140,69 +140,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 }
 include 'header.php';
 ?>
-<style>
-.login-page{min-height:85vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:radial-gradient(600px 300px at 10% 10%, rgba(42,157,143,0.18), transparent),radial-gradient(800px 400px at 90% 90%, rgba(34,197,94,0.15), transparent),linear-gradient(180deg, #f7faf6 0%, #eef6f0 100%)}
-.form-box{background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);border:1px solid rgba(0,0,0,0.06);max-width:440px;width:100%;border-radius:20px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.06)}
-.badge{display:inline-flex;align-items:center;gap:6px;background:#111;color:#fff;padding:6px 12px;border-radius:100px;font-size:0.7rem;font-weight:900;letter-spacing:0.5px;text-transform:uppercase}
-.input-group{position:relative;margin-bottom:18px}
-.input-group label{font-size:0.85rem;font-weight:800;color:#1a2e35;margin-bottom:6px;display:flex;align-items:center;gap:6px}
-.input-group input{width:100%;padding:14px 44px 14px 14px;font-size:1rem;border:1.8px solid #d1d5db;border-radius:12px;outline:none;transition:all 0.2s;background:#fff}
-.input-group input:focus{border-color:#2a9d8f;box-shadow:0 0 0 4px rgba(42,157,143,0.15)}
-.eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-10%);background:#f3f4f6;border:none;width:36px;height:36px;border-radius:10px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center}
-.submit-btn{width:100%;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;font-weight:900;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
-.social-divider{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:0.75rem;font-weight:800;color:#9ca3af;letter-spacing:1px;justify-content:center}
-.social-divider::before,.social-divider::after{content:"";flex:1;height:1px;background:#e5e7eb}
-.social-btn{width:100%;padding:13px;border-radius:12px;border:1.5px solid #e5e7eb;background:#fff;font-weight:800;font-size:0.92rem;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;color:#111;margin-bottom:10px}
-.social-btn.facebook{background:#1877f2;color:#fff;border-color:#1877f2}
-</style>
-<div class="login-page">
-    <div class="form-box">
-        <div style="text-align:center; margin-bottom:22px;">
-            <div class="badge"><i class="fas fa-leaf"></i> Bukid2Bayan</div>
-            <div style="margin-top:14px; width:64px; height:64px; background:linear-gradient(135deg,#2a9d8f,#22c55e); border-radius:18px; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:1.8rem;">
-                <i class="fas fa-user"></i>
-            </div>
-            <h2 style="font-size:1.9rem; margin:12px 0 4px 0; font-weight:900; color:#111;">Welcome Back</h2>
-            <p style="font-size:0.9rem; color:#6b7280; margin:0;">Fresh gulay at bigas, diretso sa bayan</p>
-        </div>
-        <?php if(!empty($error_message)): ?>
-            <div style="background:#fef2f2; border:1.5px solid #fecaca; color:#991b1b; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; display:flex; gap:10px;">
-                <i class="fas fa-exclamation-triangle" style="margin-top:2px;"></i>
-                <span><?= htmlspecialchars($error_message); ?></span>
-            </div>
-        <?php endif; ?>
-        <form action="login.php" method="post">
-            <div class="input-group">
-                <label><i class="fas fa-envelope" style="color:#2a9d8f;"></i> Email Address</label>
-                <input type="email" name="email" required placeholder="you@gmail.com" value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
-            </div>
-            <div class="input-group">
-                <label><i class="fas fa-lock" style="color:#2a9d8f;"></i> Password</label>
-                <div style="position:relative;">
-                    <input type="password" id="password" name="password" required placeholder="Enter your password" style="padding-right:50px;">
-                    <button type="button" class="eye-btn" onclick="togglePass()"><i class="fas fa-eye" id="eyeIcon"></i></button>
-                </div>
-            </div>
-            <button type="submit" class="submit-btn"><i class="fas fa-sign-in-alt"></i> Login</button>
-        </form>
-        <div class="social-divider">OR</div>
-        <a href="auth/google.php" class="social-btn">
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width:18px;height:18px;"> Continue with Google
-        </a>
-        <a href="auth/facebook.php" class="social-btn facebook">
-            <i class="fab fa-facebook" style="font-size:18px;"></i> Continue with Facebook
-        </a>
-        <p style="margin:20px 0 0 0; font-size:0.9rem; text-align:center; color:#6b7280;">
-            Wala ka pa account? <a href="register.php" style="font-weight:900; color:#2a9d8f; text-decoration:none;">Gumawa ng bago</a>
-        </p>
-    </div>
-</div>
-<script>
-function togglePass(){
-    const input = document.getElementById('password');
-    const icon = document.getElementById('eyeIcon');
-    if(input.type === 'password'){ input.type='text'; icon.classList.replace('fa-eye','fa-eye-slash'); }
-    else { input.type='password'; icon.classList.replace('fa-eye-slash','fa-eye'); }
-}
-</script>
-<?php include 'footer.php'; ?>
+<!-- yung HTML mo sa baba same lang, wag mo na palitan -->
