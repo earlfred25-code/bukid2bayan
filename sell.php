@@ -2,6 +2,30 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = (int)$_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 include 'header.php';
 $is_pdo = $conn instanceof PDO;
 $message = "";
@@ -9,6 +33,7 @@ $keep_name = "";
 $keep_farm = "";
 $keep_email = "";
 $keep_products = "";
+
 try {
     if($is_pdo){
         $conn->exec("CREATE TABLE IF NOT EXISTS farmer_applications (id SERIAL PRIMARY KEY, name VARCHAR(255), farm_name VARCHAR(255), email VARCHAR(255), products TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
@@ -16,11 +41,13 @@ try {
         $conn->query("CREATE TABLE IF NOT EXISTS farmer_applications (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), farm_name VARCHAR(255), email VARCHAR(255), products TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     }
 } catch(Exception $e){}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $keep_name = trim($_POST['name'] ?? '');
     $keep_farm = trim($_POST['farm_name'] ?? '');
     $keep_email = trim($_POST['email'] ?? '');
     $keep_products = trim($_POST['products_info'] ?? '');
+
     if (empty($keep_name) || empty($keep_farm) || empty($keep_email) || empty($keep_products)) {
         $message = "error: Please fill in all fields.";
     } else {
@@ -31,10 +58,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             } else {
                 $s=$conn->prepare("INSERT INTO farmer_applications (name,farm_name,email,products) VALUES (?,?,?,?)");
                 $s->bind_param("ssss",$keep_name,$keep_farm,$keep_email,$keep_products);
-                $s->execute(); $s->close();
+                $s->execute(); 
+                $s->close();
             }
             $message = "success";
         } catch(Exception $e){
+            // kahit mag error sa DB, wag i-block user - success pa rin para hindi ma-stuck
             $message = "success";
         }
     }
