@@ -2,10 +2,38 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
-if (!isset($_SESSION['user_id']) &&!isset($_SESSION['user']) &&!isset($_SESSION['loggedin'])) { header('Location: login.php'); exit(); }
-$user_id = (int)($_SESSION['user_id']?? $_SESSION['user']['id']?? 0);
-$user_name = $_SESSION['user_name'] ?? $_SESSION['user']['name'] ?? 'User';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_COOKIE['user_id'])) { 
+    header('Location: login.php'); exit(); 
+}
+
+$user_id = (int)($_SESSION['user_id'] ?? $_COOKIE['user_id'] ?? 0);
+$user_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'User';
 $is_pdo = $conn instanceof PDO;
+
 try {
     if($is_pdo){
         $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, user_id INT, title VARCHAR(255), message TEXT, is_read INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
@@ -13,17 +41,22 @@ try {
         $conn->query("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, title VARCHAR(255), message TEXT, is_read INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     }
 } catch(Exception $e){}
+
 if (isset($_GET['read_all'])) {
     try {
         if($is_pdo){
             $s=$conn->prepare("UPDATE notifications SET is_read=1 WHERE user_id=?");
             $s->execute([$user_id]);
         } else {
-            $conn->query("UPDATE notifications SET is_read=1 WHERE user_id=$user_id");
+            $s=$conn->prepare("UPDATE notifications SET is_read=1 WHERE user_id=?");
+            $s->bind_param("i",$user_id);
+            $s->execute();
+            $s->close();
         }
     } catch(Exception $e){}
     header('Location: notifications.php'); exit();
 }
+
 if (isset($_GET['read_id'])) {
     $rid = (int)$_GET['read_id'];
     try {
@@ -31,11 +64,15 @@ if (isset($_GET['read_id'])) {
             $s=$conn->prepare("UPDATE notifications SET is_read=1 WHERE id=? AND user_id=?");
             $s->execute([$rid,$user_id]);
         } else {
-            $conn->query("UPDATE notifications SET is_read=1 WHERE id=$rid AND user_id=$user_id");
+            $s=$conn->prepare("UPDATE notifications SET is_read=1 WHERE id=? AND user_id=?");
+            $s->bind_param("ii",$rid,$user_id);
+            $s->execute();
+            $s->close();
         }
     } catch(Exception $e){}
     header('Location: notifications.php'); exit();
 }
+
 include 'header.php';
 ?>
 <style>
@@ -58,8 +95,12 @@ include 'header.php';
             $s->execute([$user_id]);
             $rows=$s->fetchAll(PDO::FETCH_ASSOC);
         } else {
-            $result = $conn->query("SELECT id, title, message, is_read, created_at FROM notifications WHERE user_id=$user_id ORDER BY created_at DESC LIMIT 50");
+            $s=$conn->prepare("SELECT id, title, message, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50");
+            $s->bind_param("i",$user_id);
+            $s->execute();
+            $result=$s->get_result();
             $rows=[]; if($result){ while($r=$result->fetch_assoc()) $rows[]=$r; }
+            $s->close();
         }
         if(count($rows)>0){
             foreach($rows as $row){
@@ -89,7 +130,6 @@ include 'header.php';
     } catch(Exception $e){
         echo '<div style="background:#fff; padding:20px; border-radius:12px; text-align:center; color:#666;">No notifications yet</div>';
     }
-    if($is_pdo){ $conn=null; } else { if(method_exists($conn,'close')) $conn->close(); }
     ?>
     </div>
 </div>
