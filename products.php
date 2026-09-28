@@ -2,12 +2,37 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 include 'header.php';
 $is_pdo = $conn instanceof PDO;
 $search_term = '';
 $is_search = false;
 $result_rows = [];
 $total = 0;
+
 try {
     if (isset($_GET['search']) && !empty(trim($_GET['search']))) {
         $search_term = trim($_GET['search']);
@@ -23,14 +48,32 @@ try {
             $stmt->execute();
             $res=$stmt->get_result();
             if($res){ while($r=$res->fetch_assoc()) $result_rows[]=$r; }
+            $stmt->close();
         }
     } else {
-        if($is_pdo){
-            $res=$conn->query("SELECT id, name, farmer_name, price, unit, image_url FROM products ORDER BY name ASC");
-            if($res) $result_rows=$res->fetchAll(PDO::FETCH_ASSOC);
+        $cat = $_GET['cat'] ?? '';
+        if($cat!='' && in_array($cat,['fruits','vegetables','essentials'])){
+            if($is_pdo){
+                $stmt=$conn->prepare("SELECT id, name, farmer_name, price, unit, image_url FROM products WHERE LOWER(category)=? ORDER BY name ASC");
+                $stmt->execute([strtolower($cat)]);
+                $result_rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $stmt=$conn->prepare("SELECT id, name, farmer_name, price, unit, image_url FROM products WHERE LOWER(category)=? ORDER BY name ASC");
+                $cat_low=strtolower($cat);
+                $stmt->bind_param("s",$cat_low);
+                $stmt->execute();
+                $res=$stmt->get_result();
+                if($res){ while($r=$res->fetch_assoc()) $result_rows[]=$r; }
+                $stmt->close();
+            }
         } else {
-            $res=$conn->query("SELECT id, name, farmer_name, price, unit, image_url FROM products ORDER BY name ASC");
-            if($res){ while($r=$res->fetch_assoc()) $result_rows[]=$r; }
+            if($is_pdo){
+                $res=$conn->query("SELECT id, name, farmer_name, price, unit, image_url FROM products ORDER BY name ASC");
+                if($res) $result_rows=$res->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $res=$conn->query("SELECT id, name, farmer_name, price, unit, image_url FROM products ORDER BY name ASC");
+                if($res){ while($r=$res->fetch_assoc()) $result_rows[]=$r; }
+            }
         }
     }
     $total=count($result_rows);
@@ -48,7 +91,7 @@ try {
             <p style="font-size:1.05rem; margin-top:8px; color:#fff;">Found <strong><?php echo $total; ?></strong> results <a href="products.php" style="color:#fff; background:rgba(0,0,0,0.2); padding:6px 14px; border-radius:8px; text-decoration:none; margin-left:8px;">Clear</a></p>
         <?php else: ?>
             <h1 style="font-size:clamp(1.8rem,5vw,2.6rem); color:#fff; margin:0; font-weight:900;">All Products</h1>
-            <p style="font-size:1.1rem; margin-top:8px; color:#fff;">Fresh from farmers - <?php echo $total; ?> items available</p>
+            <p style="font-size:1.1rem; margin-top:8px; color:#fff;">Fresh from farmers - <?php echo $total; ?> items available • Guest pwede mamili</p>
         <?php endif; ?>
     </div>
 </div>
@@ -80,13 +123,10 @@ try {
         <?php else: ?>
             <div style="grid-column:1/-1; text-align:center; background:#fff; padding:40px; border-radius:14px; border:1px solid #ddd;">
                 <h3>No products found</h3>
-                <a href="products.php" style="background:#2a9d8f; color:#fff; padding:10px 20px; border-radius:8px; text-decoration:none; display:inline-block; margin-top:10px;">Browse All</a>
+                <p style="color:#666;">Try ibang search</p>
+                <a href="products.php" style="background:#2a9d8f; color:#fff; padding:10px 20px; border-radius:8px; text-decoration:none; display:inline-block; margin-top:10px; font-weight:800;">Browse All</a>
             </div>
         <?php endif; ?>
     </section>
 </div>
-<?php
-if(!$is_pdo && isset($stmt) && method_exists($stmt,'close')) $stmt->close();
-if(!$is_pdo && isset($conn) && method_exists($conn,'close')) $conn->close();
-include 'footer.php';
-?>
+<?php include 'footer.php'; ?>
