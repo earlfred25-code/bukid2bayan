@@ -2,7 +2,30 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
-include 'header.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 $is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']) || isset($_COOKIE['user_id']);
 $is_pdo = $conn instanceof PDO;
 
@@ -32,6 +55,8 @@ if(isset($_POST['help_name'])){
         } catch(Exception $e){ $flash = 'Sorry, we could not send your message. Try again.'; }
     }
 }
+
+include 'header.php';
 $q = strtolower(trim($_GET['q'] ?? ''));
 ?>
 <style>
@@ -83,18 +108,18 @@ $q = strtolower(trim($_GET['q'] ?? ''));
         <div class="help-steps">
             <div style="background:#f8fdfc; border:1px solid #cfe9e5; border-radius:12px; padding:16px; text-align:center;">
                 <div style="background:#2a9d8f; color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:900;">1</div>
-                <p style="font-weight:800; margin:10px 0 4px 0;">Log in</p>
-                <p style="font-size:0.9rem; color:#555; margin:0;">Make an account first so we can save your orders and delivery address.</p>
+                <p style="font-weight:800; margin:10px 0 4px 0;">Browse as Guest</p>
+                <p style="font-size:0.9rem; color:#555; margin:0;">Kahit hindi ka naka-login pwede ka mamili at mag-add to cart.</p>
             </div>
             <div style="background:#f8fdfc; border:1px solid #cfe9e5; border-radius:12px; padding:16px; text-align:center;">
                 <div style="background:#2a9d8f; color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:900;">2</div>
                 <p style="font-weight:800; margin:10px 0 4px 0;">Add to Cart</p>
-                <p style="font-size:0.9rem; color:#555; margin:0;">Look around, pick what you like, set how many kilos, and add them to your cart.</p>
+                <p style="font-size:0.9rem; color:#555; margin:0;">Pili ka ng gulay, ilagay ilang kilo, add to cart.</p>
             </div>
             <div style="background:#f8fdfc; border:1px solid #cfe9e5; border-radius:12px; padding:16px; text-align:center;">
                 <div style="background:#2a9d8f; color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:900;">3</div>
                 <p style="font-weight:800; margin:10px 0 4px 0;">Checkout</p>
-                <p style="font-size:0.9rem; color:#555; margin:0;">Check your cart and checkout. Order before 3PM and we deliver it today.</p>
+                <p style="font-size:0.9rem; color:#555; margin:0;">Sa checkout lang hihingi ng login, tapos deliver na today pag before 3PM.</p>
             </div>
         </div>
     </div>
@@ -104,12 +129,12 @@ $q = strtolower(trim($_GET['q'] ?? ''));
         
         <details style="border:1px solid #eee; border-radius:10px; padding:14px 16px; margin-bottom:10px;" open>
             <summary style="font-weight:800; cursor:pointer; font-size:1.05rem;">Do I need an account to order?</summary>
-            <p style="margin:10px 0 0 0; color:#444; line-height:1.6;">Yeah, you need to create an account first. That way we can keep your orders and know where to deliver.</p>
+            <p style="margin:10px 0 0 0; color:#444; line-height:1.6;">Pwede ka mag-browse at mag-add to cart kahit guest. Sa checkout lang namin hihingiin login mo para sa delivery address.</p>
         </details>
 
         <details style="border:1px solid #eee; border-radius:10px; padding:14px 16px; margin-bottom:10px;">
             <summary style="font-weight:800; cursor:pointer; font-size:1.05rem;">How much is delivery?</summary>
-            <p style="margin:10px 0 0 0; color:#444; line-height:1.6;">If your order is ₱500 and up, delivery is free around Biñan and nearby areas. If it is less than that, it is just ₱49.</p>
+            <p style="margin:10px 0 0 0; color:#444; line-height:1.6;">If your order is ₱500 and up, delivery is free around Biñan and nearby areas. If it is less than that, it is just ₱50.</p>
         </details>
 
         <details style="border:1px solid #eee; border-radius:10px; padding:14px 16px; margin-bottom:10px;">
@@ -120,7 +145,7 @@ $q = strtolower(trim($_GET['q'] ?? ''));
         <details style="border:1px solid #eee; border-radius:10px; padding:14px 16px; margin-bottom:10px;" id="sell">
             <summary style="font-weight:800; cursor:pointer; font-size:1.05rem;">I am a farmer, how do I sell here?</summary>
             <p style="margin:10px 0 0 0; color:#444; line-height:1.6;">Just click Sell on BUKID2BAYAN or go to Farmer Centre. Create a farmer account and you can start listing your harvest. No fees to list.</p>
-            <a href="<?= $is_logged ? 'farmer_centre.php' : 'login.php' ?>" style="display:inline-block; margin-top:10px; background:#2a9d8f; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:800;">Go to Farmer Centre</a>
+            <a href="farmer_centre.php" style="display:inline-block; margin-top:10px; background:#2a9d8f; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:800;">Go to Farmer Centre</a>
         </details>
     </div>
 
