@@ -7,9 +7,9 @@ $is_pdo = $conn instanceof PDO;
 $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
             || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-$secure = $is_https; // false sa localhost, true sa Vercel
+$secure = $is_https;
 
-// restore galing cookie
+// restore from cookie pag nawala session sa Vercel
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     try{
         $uid = (int)$_COOKIE['user_id'];
@@ -34,10 +34,10 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     }catch(Exception $e){}
 }
 
-// kung naka-login na, wag na pumasok sa login page
+// kung naka-login na, redirect agad
 if (isset($_SESSION['user_id'])) {
     $is_admin = $_SESSION['is_admin'] ?? 0;
-    $role = $_SESSION['role'] ?? 'buyer';
+    $role = strtolower($_SESSION['role'] ?? 'buyer');
     if ($is_admin == 1) { header("Location: admin/index.php"); exit(); }
     elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
     else { header("Location: buyer_dashboard.php"); exit(); }
@@ -92,8 +92,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
                     setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
 
+                    $role = strtolower($_SESSION['role'] ?? 'buyer');
                     if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); exit(); }
-                    elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+                    elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
                     else { header("Location: buyer_dashboard.php"); exit(); }
                 } else {
                     $error_message = $user ? "Incorrect email or password." : "No account found with that email.";
@@ -123,8 +124,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         setcookie('role', $user['role']??'buyer', ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
                         setcookie('is_admin', $user['is_admin']??0, ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
                         
+                        $role = strtolower($_SESSION['role'] ?? 'buyer');
                         if (($_SESSION['is_admin'] ?? 0) == 1) { header("Location: admin/index.php"); exit(); }
-                        elseif (($_SESSION['role'] ?? '') === 'farmer') { header("Location: farmer_centre.php"); exit(); }
+                        elseif ($role === 'farmer') { header("Location: farmer_centre.php"); exit(); }
                         else { header("Location: buyer_dashboard.php"); exit(); }
                     } else { $error_message = "Incorrect email or password."; }
                 } else { $error_message = "No account found with that email."; }
@@ -163,23 +165,13 @@ include 'header.php';
         <?php if(!empty($error_message)): ?>
             <div style="background:#fef2f2; border:1.5px solid #fecaca; color:#991b1b; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; display:flex; gap:10px;">
                 <i class="fas fa-exclamation-triangle" style="margin-top:2px;"></i>
-                <span><?php echo htmlspecialchars($error_message); ?></span>
-            </div>
-        <?php endif; ?>
-        <?php if(isset($_GET['verified'])): ?>
-            <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; font-weight:700;">
-                <i class="fas fa-check-circle"></i> Email verified! You can now login.
-            </div>
-        <?php endif; ?>
-        <?php if(isset($_GET['registered'])): ?>
-            <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem; font-weight:700;">
-                <i class="fas fa-check-circle"></i> Account created! Please login.
+                <span><?= htmlspecialchars($error_message); ?></span>
             </div>
         <?php endif; ?>
         <form action="login.php" method="post">
             <div class="input-group">
                 <label><i class="fas fa-envelope" style="color:#2a9d8f;"></i> Email Address</label>
-                <input type="email" name="email" required placeholder="you@gmail.com" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+                <input type="email" name="email" required placeholder="you@gmail.com" value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
             </div>
             <div class="input-group">
                 <label><i class="fas fa-lock" style="color:#2a9d8f;"></i> Password</label>
