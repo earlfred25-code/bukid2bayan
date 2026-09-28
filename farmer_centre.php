@@ -1,12 +1,13 @@
 <?php
 ob_start();
+// FIX PARA SA VERCEL - i-save session sa /tmp na writable
+ini_set('session.save_path', sys_get_temp_dir());
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
 $is_pdo = $conn instanceof PDO;
 $is_pgsql = $is_pdo && $conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
 
-// Restore session from cookie for Vercel serverless
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     $uid_cookie = (int)$_COOKIE['user_id'];
     try{
@@ -55,18 +56,6 @@ if (!function_exists('addTracking')) {
     }
 }
 
-try {
-    if ($is_pgsql) {
-        $conn->exec("CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0, category VARCHAR(50) DEFAULT 'Gulay', description TEXT)");
-        $conn->exec("CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, user_id INT, customer_name VARCHAR(255), phone VARCHAR(50), address TEXT, total_amount DECIMAL(10,2), payment_method VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', tracking_number VARCHAR(50), courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress', farmer_lat DECIMAL(10,7) DEFAULT 14.3320, farmer_lng DECIMAL(10,7) DEFAULT 121.0850, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-        $conn->exec("CREATE TABLE IF NOT EXISTS order_items (id SERIAL PRIMARY KEY, order_id INT, product_id INT, product_name VARCHAR(255), price DECIMAL(10,2), quantity INT, farmer_id INT NULL)");
-    } else {
-        $conn->query("CREATE TABLE IF NOT EXISTS products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0, category VARCHAR(50) DEFAULT 'Gulay', description TEXT)");
-        $conn->query("CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, customer_name VARCHAR(255), phone VARCHAR(50), address TEXT, total_amount DECIMAL(10,2), payment_method VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', tracking_number VARCHAR(50), courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress', farmer_lat DECIMAL(10,7) DEFAULT 14.3320, farmer_lng DECIMAL(10,7) DEFAULT 121.0850, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-        $conn->query("CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, product_id INT, product_name VARCHAR(255), price DECIMAL(10,2), quantity INT, farmer_id INT NULL)");
-    }
-} catch(Exception $e){}
-
 if (isset($_POST['add_product'])) {
     $name = isset($_POST['name']) ? trim($_POST['name']) : '';
     $price = isset($_POST['price']) ? (float)$_POST['price'] : 0;
@@ -76,22 +65,21 @@ if (isset($_POST['add_product'])) {
     $description = isset($_POST['description']) ? trim($_POST['description']) : '';
     $image = isset($_POST['image_url']) ? trim($_POST['image_url']) : '';
 
+    // VERCEL FIX - wag na gumamit ng data:image base64, bawal sa Vercel
     if(isset($_FILES['image']) && $_FILES['image']['error'] == 0){
         $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
         if(in_array($ext, array('jpg','jpeg','png','webp'))){
-            $newName = 'prod_'.$user_id.'_'.time().'_'.rand(100,999).'.'.$ext;
             if(is_writable(__DIR__)){
                 $uploadDir = __DIR__.'/uploads';
                 @mkdir($uploadDir, 0777, true);
+                $newName = 'prod_'.$user_id.'_'.time().'_'.rand(100,999).'.'.$ext;
                 $dest = $uploadDir.'/'.$newName;
                 if(@move_uploaded_file($_FILES['image']['tmp_name'], $dest)){
                     $image = 'uploads/'.$newName;
                 }
             } else {
-                $tmpData = @file_get_contents($_FILES['image']['tmp_name']);
-                if($tmpData && strlen($tmpData) < 2097152){
-                    $image = 'data:image/'.$ext.';base64,'.base64_encode($tmpData);
-                }
+                // Sa Vercel, wala tayong file storage - gamitin na lang placeholder muna
+                $image = '';
             }
         }
     }
