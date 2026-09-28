@@ -19,8 +19,8 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
             if($u){
                 $_SESSION['user_id'] = $u['id'];
                 $_SESSION['user_name'] = $u['username'];
-                $_SESSION['role'] = $u['role']?? 'buyer';
-                $_SESSION['is_admin'] = $u['is_admin']?? 0;
+                $_SESSION['role'] = $u['role'] ?? 'buyer';
+                $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
             }
         }catch(Exception $e){}
     }
@@ -36,9 +36,11 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 $is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']) || isset($_COOKIE['user_id']);
+$role = $_SESSION['role'] ?? $_COOKIE['role'] ?? 'buyer';
+$is_farmer = in_array(strtolower($role), ['farmer','seller','admin']);
+
 $cart_link = 'cart.php';
-$farmer_link = 'farmer_centre.php';
-$sell_link = 'sell.php';
+$farmer_link = 'farmer_dashboard.php';
 $account_link = $is_logged ? 'profile.php' : 'login.php';
 $notif_link = $is_logged ? 'notifications.php' : 'login.php';
 ?>
@@ -100,8 +102,9 @@ $notif_link = $is_logged ? 'notifications.php' : 'login.php';
         <div class="top-glass">
             <div class="top-glass-inner">
                 <div style="display:flex; gap:20px;">
-                    <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store" style="font-size:0.75rem;"></i> Farmer Centre</a>
-                    <a href="<?php echo $sell_link; ?>"><i class="fas fa-seedling" style="font-size:0.75rem;"></i> Sell on BUKID2BAYAN</a>
+                    <?php if($is_logged && $is_farmer): ?>
+                        <a href="<?php echo $farmer_link; ?>" style="font-weight:800; color:#2d7a3e;"><i class="fas fa-store" style="font-size:0.75rem;"></i> Farmer Dashboard</a>
+                    <?php endif; ?>
                 </div>
                 <div style="display:flex; gap:18px; align-items:center;">
                     <?php if($is_logged){ ?><a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a><?php } ?>
@@ -142,8 +145,9 @@ $notif_link = $is_logged ? 'notifications.php' : 'login.php';
         <a href="products.php"><i class="fas fa-search"></i> Search Products</a>
         <?php } ?>
         <a href="<?php echo $account_link; ?>"><i class="fas fa-user-circle"></i> My Account</a>
-        <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Centre</a>
-        <a href="<?php echo $sell_link; ?>"><i class="fas fa-seedling"></i> Sell on BUKID2BAYAN</a>
+        <?php if($is_logged && $is_farmer): ?>
+            <a href="<?php echo $farmer_link; ?>"><i class="fas fa-store"></i> Farmer Dashboard</a>
+        <?php endif; ?>
         <a href="<?php echo $cart_link; ?>"><i class="fas fa-shopping-cart"></i> Cart (<?php echo $cart_count; ?>)</a>
         <?php if($is_logged){ ?>
         <a href="my_orders.php"><i class="fas fa-box"></i> My Orders</a>
