@@ -2,9 +2,30 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
-include 'header.php';
-$is_logged = isset($_SESSION['user_id']) || isset($_SESSION['user']) || isset($_SESSION['loggedin']);
-$shop_link = $is_logged ? 'products.php' : 'login.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 function find_image($want){
     $dir = __DIR__ . '/images';
     if(!is_dir($dir)) return '/images/'.basename($want);
@@ -24,6 +45,10 @@ function find_image($want){
     }
     return '/images/'.basename($want);
 }
+
+include 'header.php';
+$shop_link = 'products.php';
+$is_pdo = $conn instanceof PDO;
 ?>
 <style>
 body{ background:url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1920') no-repeat center fixed; background-size:cover; }
@@ -33,8 +58,9 @@ body{ background:url('https://images.unsplash.com/photo-1500382017468-9049fed747
 .hero-overlay h1{ font-size:clamp(1.8rem, 5vw, 2.9rem); font-weight:900; margin:0; line-height:1.15; text-shadow:0 4px 20px rgba(0,0,0,0.4); }
 .suki-section{ background:rgba(255,255,255,0.92); backdrop-filter:blur(12px); position:relative; z-index:5; padding:40px 0 60px 0; border-radius:24px 24px 0 0; margin-top:-30px; box-shadow:0 -10px 40px rgba(0,0,0,0.1); }
 .suki-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
-.suki-card{ background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.06); border-radius:16px; padding:16px 10px; text-align:center; backdrop-filter:blur(6px); }
-.suki-card img{ width:100%; max-width:120px; height:120px; object-fit:contain; display:block; margin:0 auto; background:#f1f8e9; }
+.suki-card{ background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.06); border-radius:16px; padding:16px 10px; text-align:center; backdrop-filter:blur(6px); transition:transform 0.2s; }
+.suki-card:hover{ transform:translateY(-4px); }
+.suki-card img{ width:100%; max-width:120px; height:120px; object-fit:contain; display:block; margin:0 auto; background:#f1f8e9; border-radius:12px; }
 @media(min-width:600px){ .suki-grid{ grid-template-columns:repeat(3, 1fr); gap:16px; } }
 @media(min-width:1024px){ .suki-grid{ grid-template-columns:repeat(6, 1fr); gap:20px; } }
 @media(max-width:768px){ .hero-palengke{ height:70vh; min-height:500px; } }
@@ -47,7 +73,7 @@ body{ background:url('https://images.unsplash.com/photo-1500382017468-9049fed747
     <div class="hero-overlay">
         <h1>Fresh from the Farm,<br>Straight to Your Door.</h1>
         <p style="max-width:620px; margin:16px 0 26px 0; font-weight:600; background:rgba(255,255,255,0.25); backdrop-filter:blur(10px); padding:8px 18px; border-radius:30px; border:1px solid rgba(255,255,255,0.3); font-size:clamp(0.85rem, 2.5vw, 1rem);">Gulay at prutas lang — diretso galing sa local farmers.</p>
-        <a href="<?php echo $shop_link; ?>" style="background:rgba(123,79,207,0.9); backdrop-filter:blur(8px); color:#fff; padding:14px 30px; border-radius:30px; font-weight:900; text-decoration:none; border:1px solid rgba(255,255,255,0.3); box-shadow:0 8px 20px rgba(0,0,0,0.2);">SHOP ALL PRODUCTS</a>
+        <a href="products.php" style="background:rgba(45,122,62,0.95); backdrop-filter:blur(8px); color:#fff; padding:14px 30px; border-radius:30px; font-weight:900; text-decoration:none; border:1px solid rgba(255,255,255,0.3); box-shadow:0 8px 20px rgba(0,0,0,0.2);">SHOP ALL PRODUCTS</a>
     </div>
 </section>
 
@@ -61,32 +87,30 @@ body{ background:url('https://images.unsplash.com/photo-1500382017468-9049fed747
             <?php
             try {
                 $sql = "SELECT id, name, image_url FROM products WHERE LOWER(name) NOT LIKE '%fish%' AND LOWER(name) NOT LIKE '%meat%' AND LOWER(name) NOT LIKE '%pork%' AND LOWER(name) NOT LIKE '%beef%' AND LOWER(name) NOT LIKE '%chicken%' ORDER BY id DESC LIMIT 6";
-                $result = $conn->query($sql);
                 $products = [];
-                if ($result) {
-                    if (method_exists($result, 'fetch_assoc')) {
+                if($is_pdo){
+                    $stmt = $conn->query($sql);
+                    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                } else {
+                    $result = $conn->query($sql);
+                    if ($result) {
                         while($r = $result->fetch_assoc()){ $products[] = $r; }
-                    } else {
-                        $products = $result->fetchAll(PDO::FETCH_ASSOC);
                     }
                 }
                 if(count($products) > 0){
                     foreach($products as $row){
                         $img = trim($row['image_url'] ?? '');
                         $name = $row['name'] ?? 'Product';
+                        $id = (int)$row['id'];
                         $img_src = find_image($img !== '' ? $img : $name.'.jpg');
                         $img_src = htmlspecialchars($img_src, ENT_QUOTES, 'UTF-8');
-                        echo '<div class="suki-card"><a href="'.$shop_link.'"><img src="'.$img_src.'" loading="lazy"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p></div>';
+                        echo '<div class="suki-card"><a href="products.php"><img src="'.$img_src.'" loading="lazy" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'"></a><p style="font-weight:700; margin:10px 0 0 0; font-size:0.85rem; color:#234723;">'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</p><a href="products.php" style="display:inline-block; margin-top:8px; font-size:0.75rem; font-weight:800; color:#fff; background:#2d7a3e; padding:5px 12px; border-radius:20px; text-decoration:none;">View</a></div>';
                     }
                 } else {
-                    echo '<p style="grid-column:1/-1; text-align:center; color:#666;">Wala pang products.</p>';
+                    echo '<p style="grid-column:1/-1; text-align:center; color:#666;">Wala pang products. Mag-add ka muna sa <a href="sell.php" style="color:#2d7a3e; font-weight:800;">Sell</a></p>';
                 }
             } catch(Exception $e){
                 echo '<p style="grid-column:1/-1; text-align:center; color:red;">Error: '.htmlspecialchars($e->getMessage()).'</p>';
-            }
-            if (isset($conn)) {
-                if (method_exists($conn, 'close')) { $conn->close(); } 
-                else { $conn = null; }
             }
             ?>
         </div>
