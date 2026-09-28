@@ -2,9 +2,41 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = (int)$_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
+// pag logged in na wag na mag register ulit
+if(isset($_SESSION['user_id']) || isset($_COOKIE['user_id'])){
+    $is_admin = $_SESSION['is_admin'] ?? $_COOKIE['is_admin'] ?? 0;
+    $role = $_SESSION['role'] ?? $_COOKIE['role'] ?? 'buyer';
+    if($is_admin==1){ header("Location: admin/index.php"); exit(); }
+    elseif($role==='farmer'){ header("Location: farmer_dashboard.php"); exit(); }
+    else { header("Location: buyer_dashboard.php"); exit(); }
+}
+
 $is_pdo = $conn instanceof PDO;
 $error_message = "";
-$success_message = "";
 
 if($_SERVER["REQUEST_METHOD"]=="POST"){
     $username = trim($_POST['username']??'');
@@ -24,6 +56,8 @@ if($_SERVER["REQUEST_METHOD"]=="POST"){
         $error_message="Password too short - at least 6 characters.";
     } elseif($password!==$password_confirm){
         $error_message="Passwords don't match.";
+    } elseif(!in_array($role,['buyer','farmer'])){
+        $error_message="Invalid role.";
     } else {
         try{
             if($is_pdo){
@@ -33,29 +67,31 @@ if($_SERVER["REQUEST_METHOD"]=="POST"){
                 else{
                     $hashed=password_hash($password, PASSWORD_DEFAULT);
                     try{
-                        $ins=$conn->prepare("INSERT INTO users (username, phone_number, email, password, role, is_verified) VALUES (?,?,?,?,?,?)");
-                        $ins->execute([$username,$phone,$email,$hashed,$role,true]);
+                        $ins=$conn->prepare("INSERT INTO users (username, phone_number, email, password, role, is_verified) VALUES (?,?,?,?,?,1)");
+                        $ins->execute([$username,$phone,$email,$hashed,$role]);
                     }catch(Exception $e){
-                        // fallback kung wala pa phone_number column
-                        $ins=$conn->prepare("INSERT INTO users (username, email, password, role, is_verified) VALUES (?,?,?,?,?)");
-                        $ins->execute([$username,$email,$hashed,$role,true]);
+                        $ins=$conn->prepare("INSERT INTO users (username, email, password, role, is_verified) VALUES (?,?,?,?,1)");
+                        $ins->execute([$username,$email,$hashed,$role]);
                     }
                     header("Location: login.php?registered=1"); exit();
                 }
             } else {
                 $stmt=$conn->prepare("SELECT id FROM users WHERE email=? LIMIT 1");
                 $stmt->bind_param("s",$email); $stmt->execute(); $stmt->store_result();
-                if($stmt->num_rows>0){ $error_message="Email already exists."; }
+                if($stmt->num_rows>0){ $error_message="Email already exists."; $stmt->close(); }
                 else{
-                    $hashed=password_hash($password, PASSWORD_DEFAULT); $is_verified=1;
-                    try{
-                        $ins=$conn->prepare("INSERT INTO users (username, phone_number, email, password, role, is_verified) VALUES (?,?,?,?,?,?)");
-                        $ins->bind_param("sssssi",$username,$phone,$email,$hashed,$role,$is_verified);
-                    }catch(Exception $e){
-                        $ins=$conn->prepare("INSERT INTO users (username, email, password, role, is_verified) VALUES (?,?,?,?,?)");
-                        $ins->bind_param("ssssi",$username,$email,$hashed,$role,$is_verified);
+                    $stmt->close();
+                    $hashed=password_hash($password, PASSWORD_DEFAULT);
+                    $ins=$conn->prepare("INSERT INTO users (username, phone_number, email, password, role, is_verified) VALUES (?,?,?,?,?,1)");
+                    if($ins){
+                        $ins->bind_param("sssss",$username,$phone,$email,$hashed,$role);
+                        if($ins->execute()){ $ins->close(); header("Location: login.php?registered=1"); exit(); }
+                        $ins->close();
+                    } else {
+                        $ins=$conn->prepare("INSERT INTO users (username, email, password, role, is_verified) VALUES (?,?,?,?,1)");
+                        $ins->bind_param("ssssi",$username,$email,$hashed,$role,$is_verified=1);
+                        if($ins->execute()){ $ins->close(); header("Location: login.php?registered=1"); exit(); }
                     }
-                    if($ins->execute()){ header("Location: login.php?registered=1"); exit(); }
                 }
             }
         }catch(Exception $e){ $error_message="Error: ".$e->getMessage(); }
@@ -73,7 +109,6 @@ include 'header.php';
         <h2 style="margin:0 0 4px 0; font-weight:900; font-size:1.4rem; text-align:center;">Create Account</h2>
         <p style="margin:0 0 18px 0; color:#6b7280; font-size:0.85rem; text-align:center;">Sign in for your best experience</p>
 
-        <!-- FACEBOOK AT GMAIL LANG - GAYA NUNG SCREENSHOT MO -->
         <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
             <a href="auth/google.php" style="display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:12px; border:1.8px solid #d1d5db; border-radius:12px; background:#fff; color:#111; text-decoration:none; font-weight:700; font-size:0.9rem;">
                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width:18px; height:18px;"> Continue with Google
@@ -85,22 +120,21 @@ include 'header.php';
 
         <div style="display:flex; align-items:center; gap:12px; margin:18px 0;">
             <div style="height:1px; background:#e5e7eb; flex:1;"></div>
-            <span style="color:#9ca3af; font-size:0.8rem;">or continue with your email address</span>
+            <span style="color:#9ca3af; font-size:0.8rem;">or continue with email</span>
             <div style="height:1px; background:#e5e7eb; flex:1;"></div>
         </div>
 
-        <!-- USERNAME - PHONE - PASSWORD -->
         <form method="POST" autocomplete="off" style="display:flex; flex-direction:column; gap:12px;">
-            <input type="text" name="username" required placeholder="Username" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px; width:100%; box-sizing:border-box;">
-            <input type="tel" name="phone_number" required placeholder="Phone Number" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px; width:100%; box-sizing:border-box;">
-            <input type="email" name="email" required placeholder="Email Address" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px; width:100%; box-sizing:border-box;">
+            <input type="text" name="username" required placeholder="Username" value="<?= htmlspecialchars($_POST['username']??'')?>" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px; width:100%; box-sizing:border-box;">
+            <input type="tel" name="phone_number" required placeholder="Phone Number" value="<?= htmlspecialchars($_POST['phone_number']??'')?>" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px; width:100%; box-sizing:border-box;">
+            <input type="email" name="email" required placeholder="Email Address" value="<?= htmlspecialchars($_POST['email']??'')?>" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px; width:100%; box-sizing:border-box;">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <input type="password" name="password" required placeholder="Password" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px;">
                 <input type="password" name="password_confirm" required placeholder="Confirm Password" style="padding:13px 14px; border:1.8px solid #d1d5db; border-radius:12px;">
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <label style="border:1.8px solid #d1d5db; border-radius:12px; padding:12px; font-weight:700; font-size:0.9rem; cursor:pointer; display:flex; align-items:center; gap:8px;"><input type="radio" name="role" value="buyer" required> Buyer</label>
-                <label style="border:1.8px solid #d1d5db; border-radius:12px; padding:12px; font-weight:700; font-size:0.9rem; cursor:pointer; display:flex; align-items:center; gap:8px;"><input type="radio" name="role" value="farmer" required> Farmer</label>
+                <label style="border:1.8px solid #d1d5db; border-radius:12px; padding:12px; font-weight:700; font-size:0.9rem; cursor:pointer; display:flex; align-items:center; gap:8px;"><input type="radio" name="role" value="buyer" required <?= (($_POST['role']??'')==='buyer'?'checked':'')?>> Buyer</label>
+                <label style="border:1.8px solid #d1d5db; border-radius:12px; padding:12px; font-weight:700; font-size:0.9rem; cursor:pointer; display:flex; align-items:center; gap:8px;"><input type="radio" name="role" value="farmer" required <?= (($_POST['role']??'')==='farmer'?'checked':'')?>> Farmer</label>
             </div>
             <button type="submit" style="width:100%; background:#111; color:#fff; padding:14px; border:none; border-radius:12px; font-weight:900; cursor:pointer; margin-top:4px;">Sign Up</button>
             <p style="text-align:center; font-size:0.85rem; color:#666; margin:6px 0 0 0;">Already have account? <a href="login.php" style="color:#2a9d8f; font-weight:800; text-decoration:none;">Login</a></p>
