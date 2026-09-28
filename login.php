@@ -5,6 +5,8 @@ $secure = $is_https;
 ini_set('session.save_path', sys_get_temp_dir());
 if (PHP_VERSION_ID >= 70300) {
     session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+} else {
+    session_set_cookie_params(0, '/', '', $secure, true);
 }
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
@@ -99,29 +101,45 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         } catch(Exception $e){ $error_message = "Login error: ".$e->getMessage(); }
     }
 }
+include 'header.php';
 ?>
-<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Login - Bukid2Bayan</title>
 <style>
-body{margin:0;font-family:system-ui;background:#f6faf6}
-.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.form-box{background:#fff;max-width:420px;width:100%;border-radius:20px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.12)}
-.input-group{margin-bottom:16px}
-.input-group label{font-weight:800;font-size:.9rem;display:block;margin-bottom:6px}
-.input-group input{width:100%;padding:14px;border:1.8px solid #d1d5db;border-radius:12px;box-sizing:border-box}
-.submit-btn{width:100%;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;font-weight:900;font-size:1rem;cursor:pointer}
-</style></head><body>
+.login-page{min-height:85vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:radial-gradient(600px 300px at 10% 10%, rgba(42,157,143,0.18), transparent),radial-gradient(800px 400px at 90% 90%, rgba(34,197,94,0.15), transparent),linear-gradient(180deg, #f7faf6 0%, #eef6f0 100%)}
+.form-box{background:rgba(255,255,255,0.96);backdrop-filter:blur(16px);border:1px solid rgba(0,0,0,0.06);max-width:440px;width:100%;border-radius:20px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.06);margin-top:20px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:#111;color:#fff;padding:6px 12px;border-radius:100px;font-size:0.7rem;font-weight:900;letter-spacing:0.5px;text-transform:uppercase}
+.input-group{position:relative;margin-bottom:18px}
+.input-group label{font-size:0.85rem;font-weight:800;color:#1a2e35;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.input-group input{width:100%;padding:14px 14px 14px 14px;font-size:1rem;border:1.8px solid #d1d5db;border-radius:12px;outline:none;transition:all 0.2s;background:#fff;box-sizing:border-box}
+.input-group input:focus{border-color:#2a9d8f;box-shadow:0 0 0 4px rgba(42,157,143,0.15)}
+.submit-btn{width:100%;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;font-weight:900;font-size:1.05rem;cursor:pointer}
+</style>
 <div class="login-page">
-<div class="form-box">
-<h2 style="text-align:center;margin:0 0 6px 0;">Welcome Back</h2>
-<p style="text-align:center;color:#666;margin:0 0 18px 0;">Fresh gulay at bigas, diretso sa bayan</p>
-<?php if(!empty($error_message)): ?><div style="background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;padding:12px;border-radius:12px;margin-bottom:16px;"><?php echo htmlspecialchars($error_message); ?></div><?php endif; ?>
-<form method="post">
-<div class="input-group"><label>Email</label><input type="email" name="email" required value="<?php echo isset($_POST['email'])?htmlspecialchars($_POST['email']):''; ?>"></div>
-<div class="input-group"><label>Password</label><input type="password" name="password" required></div>
-<button type="submit" class="submit-btn">Login</button>
-</form>
-<p style="text-align:center;margin-top:16px;"><a href="register.php" style="color:#2a9d8f;font-weight:800;text-decoration:none;">Gumawa ng account</a></p>
+    <div class="form-box">
+        <div style="text-align:center; margin-bottom:22px;">
+            <div class="badge">BUKID2BAYAN</div>
+            <h2 style="font-size:1.9rem; margin:12px 0 4px 0; font-weight:900; color:#111;">Welcome Back</h2>
+            <p style="font-size:0.9rem; color:#6b7280; margin:0;">Fresh gulay at bigas, diretso sa bayan</p>
+        </div>
+        <?php if(!empty($error_message)): ?>
+            <div style="background:#fef2f2; border:1.5px solid #fecaca; color:#991b1b; padding:12px 14px; border-radius:12px; margin-bottom:18px; font-size:0.9rem;">
+                <?php echo htmlspecialchars($error_message); ?>
+            </div>
+        <?php endif; ?>
+        <form method="post">
+            <div class="input-group">
+                <label>Email</label>
+                <input type="email" name="email" required placeholder="you@gmail.com" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" name="password" required placeholder="Enter your password">
+            </div>
+            <button type="submit" class="submit-btn">Login</button>
+        </form>
+        <p style="margin:20px 0 0 0; font-size:0.9rem; text-align:center; color:#6b7280;">
+            Wala ka pa account? <a href="register.php" style="font-weight:900; color:#2a9d8f; text-decoration:none;">Gumawa ng bago</a>
+        </p>
+    </div>
 </div>
-</div>
-</body></html>
+</main>
+<?php include 'footer.php'; ?>
