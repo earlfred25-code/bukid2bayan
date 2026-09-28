@@ -28,7 +28,6 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     }catch(Exception $e){}
 }
 
-// FIXED AUTH CHECK
 if (!isset($_SESSION['user_id']) && !isset($_COOKIE['user_id'])) {
     header('Location: login.php');
     exit();
@@ -133,17 +132,16 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
             if($act=='confirm'){
                 $s=$conn->prepare("UPDATE orders SET status='to_ship' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->execute([$oid,$user_id]);
-                addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order - preparing to ship');
+                addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order');
             } elseif($act=='ship'){
                 $track = 'SPXPH'.rand(1000000000,9999999999);
                 $s=$conn->prepare("UPDATE orders SET status='shipped', tracking_number=?, courier='BUKID2BAYAN Xpress' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->execute([$track,$oid,$user_id]);
-                addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel departed - tracking $track assigned");
-                addTracking($conn, $oid, 'shipped', 'Calamba Hub - In Transit', 'Parcel inbounded at logistics facility');
+                addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel $track shipped");
             } elseif($act=='complete'){
                 $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->execute([$oid,$user_id]);
-                addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered - Order Completed');
+                addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered');
             } elseif($act=='cancel'){
                 $s=$conn->prepare("UPDATE orders SET status='cancelled' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->execute([$oid,$user_id]);
@@ -153,16 +151,16 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
             if($act=='confirm'){
                 $s=$conn->prepare("UPDATE orders SET status='to_ship' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
-                addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order - preparing to ship');
+                addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order');
             } elseif($act=='ship'){
                 $track = 'SPXPH'.rand(1000000000,9999999999);
                 $s=$conn->prepare("UPDATE orders SET status='shipped', tracking_number=?, courier='BUKID2BAYAN Xpress' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->bind_param("sii",$track,$oid,$user_id); $s->execute(); $s->close();
-                addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel departed - tracking $track assigned");
+                addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel $track shipped");
             } elseif($act=='complete'){
                 $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
-                addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered - Order Completed');
+                addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered');
             } elseif($act=='cancel'){
                 $s=$conn->prepare("UPDATE orders SET status='cancelled' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
                 $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
@@ -171,21 +169,6 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
         }
     } catch(Exception $e){}
     header('Location: farmer_centre.php?filter='.$act); exit();
-}
-
-if (isset($_GET['complete'])) {
-    $oid = (int)$_GET['complete'];
-    try {
-        if($is_pdo){
-            $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
-            $s->execute([$oid,$user_id]);
-        } else {
-            $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
-            $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
-        }
-        addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered');
-    } catch(Exception $e){}
-    header('Location: farmer_centre.php'); exit();
 }
 
 $total_products = 0; $total_orders = 0; $total_earnings = 0;
@@ -220,16 +203,12 @@ include 'header.php';
 .fc-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px; }
 .fc-tabs{ background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:12px 14px; margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap; overflow-x:auto; }
 .fc-grid{ display:grid; grid-template-columns:380px 1fr; gap:20px; }
-@media(max-width:900px){
-    .fc-stats{ grid-template-columns:1fr; }
-    .fc-grid{ grid-template-columns:1fr; }
-    .fc-wrap{ margin-top:10px; }
-}
+@media(max-width:900px){ .fc-stats{ grid-template-columns:1fr; } .fc-grid{ grid-template-columns:1fr; } .fc-wrap{ margin-top:10px; } }
 </style>
 <div class="fc-wrap">
     <?php if (isset($_SESSION['flash']['success'])): ?>
         <div style="background:#e6f7f5; border:1.5px solid #2a9d8f; color:#0f3d37; padding:14px; border-radius:10px; margin-bottom:18px; text-align:center; font-weight:700;">
-            <?php echo htmlspecialchars($_SESSION['flash']['success']); unset($_SESSION['flash']['success']); ?>
+            <?= htmlspecialchars($_SESSION['flash']['success']); unset($_SESSION['flash']['success']); ?>
         </div>
     <?php endif; ?>
     <div style="background:#fff; border:1px solid #e5e5e5; border-radius:16px; padding:28px; margin-bottom:20px;">
@@ -238,16 +217,13 @@ include 'header.php';
     </div>
     <div class="fc-stats">
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#2a9d8f;"><?= $total_products ?></p>
-            <p style="font-weight:800; margin:4px 0 0 0;">My Products</p>
+            <p style="font-size:2rem; font-weight:900; margin:0; color:#2a9d8f;"><?= $total_products ?></p><p style="font-weight:800;">My Products</p>
         </div>
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#e76f51;"><?= $total_orders ?></p>
-            <p style="font-weight:800; margin:4px 0 0 0;">Total Orders Sayo</p>
+            <p style="font-size:2rem; font-weight:900; margin:0; color:#e76f51;"><?= $total_orders ?></p><p style="font-weight:800;">Total Orders</p>
         </div>
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#1a2e35;">₱<?= number_format($total_earnings, 2) ?></p>
-            <p style="font-weight:800; margin:4px 0 0 0;">Earnings</p>
+            <p style="font-size:2rem; font-weight:900; margin:0; color:#1a2e35;">₱<?= number_format($total_earnings, 2) ?></p><p style="font-weight:800;">Earnings</p>
         </div>
     </div>
     <div class="fc-tabs">
@@ -291,18 +267,12 @@ include 'header.php';
                 foreach($rows as $r){
                     $status=$r['status'];
                     $badge=$status=='pending'?'#ff9800':($status=='to_ship'?'#2196f3':($status=='shipped'?'#9c27b0':($status=='completed'?'#00b050':'#999')));
-                    echo '<div style="display:flex; justify-content:space-between; gap:12px; border:1px solid #eee; border-radius:10px; padding:12px; margin-bottom:10px; flex-wrap:wrap;">
-                            <div><b>Order #'.$r['id'].' - '.htmlspecialchars($r['product_name']).' x '.$r['quantity'].'</b> <span style="background:'.$badge.'; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:800;">'.$status.'</span>';
+                    echo '<div style="display:flex; justify-content:space-between; gap:12px; border:1px solid #eee; border-radius:10px; padding:12px; margin-bottom:10px; flex-wrap:wrap;"><div><b>Order #'.$r['id'].' - '.htmlspecialchars($r['product_name']).' x '.$r['quantity'].'</b> <span style="background:'.$badge.'; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:800;">'.$status.'</span>';
                     if(!empty($r['tracking_number'])) echo '<span style="background:#111; color:#fff; padding:2px 8px; border-radius:8px; font-size:0.7rem; margin-left:4px;">'.$r['tracking_number'].'</span>';
-                    echo '<br><span style="font-size:0.85rem; color:#333;">'.htmlspecialchars($r['customer_name']).' - '.htmlspecialchars($r['phone']).'</span></div>
-                            <div style="text-align:right; min-width:160px;"><b>₱'.number_format($r['price']*$r['quantity'],2).'</b><br>';
-                    if($status=='pending'){
-                        echo '<a href="farmer_centre.php?action=confirm&id='.$r['id'].'" style="background:#2a9d8f; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Confirm</a>';
-                    } elseif($status=='to_ship'){
-                        echo '<a href="farmer_centre.php?action=ship&id='.$r['id'].'" style="background:#111; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Ship Now</a>';
-                    } elseif($status=='shipped'){
-                        echo '<a href="farmer_centre.php?action=complete&id='.$r['id'].'" style="background:#00b050; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; display:block; text-align:center; margin-top:6px;">Mark Completed</a>';
-                    }
+                    echo '<br><span style="font-size:0.85rem; color:#333;">'.htmlspecialchars($r['customer_name']).' - '.htmlspecialchars($r['phone']).'</span></div><div style="text-align:right; min-width:160px;"><b>₱'.number_format($r['price']*$r['quantity'],2).'</b><br>';
+                    if($status=='pending') echo '<a href="farmer_centre.php?action=confirm&id='.$r['id'].'" style="background:#2a9d8f; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Confirm</a>';
+                    elseif($status=='to_ship') echo '<a href="farmer_centre.php?action=ship&id='.$r['id'].'" style="background:#111; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Ship Now</a>';
+                    elseif($status=='shipped') echo '<a href="farmer_centre.php?action=complete&id='.$r['id'].'" style="background:#00b050; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; display:block; text-align:center; margin-top:6px;">Mark Completed</a>';
                     echo '</div></div>';
                 }
             }
@@ -313,7 +283,7 @@ include 'header.php';
         <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; height:fit-content;">
             <h3 style="font-weight:900; margin:0 0 14px 0;">Add New Product</h3>
             <form method="post" enctype="multipart/form-data">
-                <input type="text" name="name" placeholder="Product Name ex: Lettuce" required style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px; font-weight:700;">
+                <input type="text" name="name" placeholder="Product Name" required style="width:100%; padding:12px; border:2px solid #ddd; border-radius:10px; margin-bottom:10px; font-weight:700;">
                 <div style="display:flex; gap:8px; margin-bottom:10px;">
                     <input type="number" step="0.01" name="price" placeholder="50.00" value="50.00" required style="flex:1; padding:12px; border:2px solid #ddd; border-radius:10px; font-weight:700;">
                     <input type="text" name="unit" value="kg" style="width:90px; padding:12px; border:2px solid #ddd; border-radius:10px; font-weight:700;">
@@ -328,7 +298,7 @@ include 'header.php';
             <?php
             try {
                 if($is_pdo){
-                    $stmt=$conn->prepare("SELECT id, name, price, unit, image_url FROM products WHERE farmer_id=? OR user_id=? ORDER BY id DESC");
+                    $stmt=$conn->prepare("SELECT id, name, price, unit FROM products WHERE farmer_id=? OR user_id=? ORDER BY id DESC");
                     $stmt->execute([$user_id,$user_id]);
                     $result=$stmt->fetchAll(PDO::FETCH_ASSOC);
                     foreach($result as $row){
@@ -336,7 +306,7 @@ include 'header.php';
                     }
                     if(count($result)==0) echo '<p style="color:#666; text-align:center; padding:20px;">Wala ka pa product.</p>';
                 } else {
-                    $stmt = $conn->prepare("SELECT id, name, price, unit, image_url FROM products WHERE farmer_id = ? OR user_id = ? ORDER BY id DESC");
+                    $stmt = $conn->prepare("SELECT id, name, price, unit FROM products WHERE farmer_id = ? OR user_id = ? ORDER BY id DESC");
                     $stmt->bind_param("ii", $user_id, $user_id);
                     $stmt->execute(); $result = $stmt->get_result();
                     while($row = $result->fetch_assoc()) {
