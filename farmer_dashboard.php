@@ -2,18 +2,40 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
-if (!isset($_SESSION['user_id']) && !isset($_SESSION['user'])) {
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role'] ?? 'farmer';
+            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+        }
+    }catch(Exception $e){}
+}
+
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_COOKIE['user_id'])) {
     header("Location: login.php"); exit();
 }
-$user_id = $_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? 0;
-$user_role = $_SESSION['role'] ?? $_SESSION['user']['role'] ?? '';
-if ($user_role !== 'farmer') {
-    if ($user_role === 'buyer') {
-        header("Location: index.php"); exit();
-    }
-}
+
+$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? $_COOKIE['user_id'] ?? 0);
+$user_role = $_SESSION['role'] ?? $_SESSION['user']['role'] ?? $_COOKIE['role'] ?? 'farmer';
+
 $is_pdo = $conn instanceof PDO;
 $message = "";
+
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_product'])) {
     $name = trim($_POST['name'] ?? '');
     $price = floatval($_POST['price'] ?? 0);
@@ -21,6 +43,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_product'])) {
     $category = trim($_POST['category'] ?? 'gulay');
     $description = trim($_POST['description'] ?? '');
     $image_url = '';
+
     if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
         $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
         $allowed = ['jpg','jpeg','png','webp'];
@@ -33,45 +56,50 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_product'])) {
                 $image_url = 'images/' . $safe_name;
             }
         }
+    } elseif(!empty($_POST['image_url'])){
+        $image_url = trim($_POST['image_url']);
     }
+
     if ($name !== '' && $price > 0) {
         try {
             if ($is_pdo) {
                 try {
-                    $stmt = $conn->prepare("INSERT INTO products (name, price, stock, category, description, image_url, farmer_id) VALUES (?,?,?,?,?,?,?)");
-                    $stmt->execute([$name, $price, $stock, $category, $description, $image_url, $user_id]);
+                    $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, stock, category, description, image_url, farmer_id, user_id, unit) VALUES (?,?,?,?,?,?,?,?,?,?)");
+                    $farmer_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
+                    $stmt->execute([$name, $farmer_name, $price, $stock, $category, $description, $image_url, $user_id, $user_id, 'kg']);
                 } catch(Exception $e){
                     $stmt = $conn->prepare("INSERT INTO products (name, price, image_url) VALUES (?,?,?)");
                     $stmt->execute([$name, $price, $image_url]);
                 }
                 $message = "Product added!";
             } else {
-                $stmt = $conn->prepare("INSERT INTO products (name, price, stock, category, description, image_url, farmer_id) VALUES (?,?,?,?,?,?,?)");
-                if (!$stmt) {
+                $farmer_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
+                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, stock, category, description, image_url, farmer_id, user_id, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                if ($stmt) {
+                    $unit = 'kg';
+                    $stmt->bind_param("ssdisssiss", $name, $farmer_name, $price, $stock, $category, $description, $image_url, $user_id, $user_id, $unit);
+                    if ($stmt->execute()) $message = "Product added!";
+                    $stmt->close();
+                } else {
                     $stmt = $conn->prepare("INSERT INTO products (name, price, image_url) VALUES (?,?,?)");
                     $stmt->bind_param("sds", $name, $price, $image_url);
-                } else {
-                    $stmt->bind_param("sdissii", $name, $price, $stock, $category, $description, $image_url, $user_id);
-                    if (!$stmt) {
-                        $stmt = $conn->prepare("INSERT INTO products (name, price, image_url) VALUES (?,?,?)");
-                        $stmt->bind_param("sds", $name, $price, $image_url);
-                    }
+                    if ($stmt->execute()) $message = "Product added!";
+                    $stmt->close();
                 }
-                if ($stmt->execute()) $message = "Product added!";
-                $stmt->close();
             }
         } catch(Exception $e){
             $message = "Error: " . $e->getMessage();
         }
     }
 }
+
 $my_products = [];
 $total_products = 0;
 try {
     if ($is_pdo) {
         try {
-            $stmt = $conn->prepare("SELECT id, name, price, stock, image_url FROM products WHERE farmer_id = ? ORDER BY id DESC");
-            $stmt->execute([$user_id]);
+            $stmt = $conn->prepare("SELECT id, name, price, stock, image_url FROM products WHERE farmer_id = ? OR user_id = ? ORDER BY id DESC");
+            $stmt->execute([$user_id, $user_id]);
             $my_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch(Exception $e){
             $stmt = $conn->query("SELECT id, name, price, image_url FROM products ORDER BY id DESC LIMIT 20");
@@ -79,9 +107,9 @@ try {
         }
         $total_products = count($my_products);
     } else {
-        $stmt = $conn->prepare("SELECT id, name, price, stock, image_url FROM products WHERE farmer_id = ? ORDER BY id DESC");
+        $stmt = $conn->prepare("SELECT id, name, price, stock, image_url FROM products WHERE farmer_id = ? OR user_id = ? ORDER BY id DESC");
         if ($stmt) {
-            $stmt->bind_param("i", $user_id);
+            $stmt->bind_param("ii", $user_id, $user_id);
             $stmt->execute();
             $res = $stmt->get_result();
             while($r = $res->fetch_assoc()) $my_products[] = $r;
@@ -102,7 +130,7 @@ include 'header.php';
 .form-card{ background:rgba(255,255,255,0.92); border-radius:16px; padding:20px; margin-bottom:24px; box-shadow:0 4px 16px rgba(0,0,0,0.06); }
 .product-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
 .product-item{ background:#fff; border-radius:12px; padding:12px; display:flex; gap:10px; align-items:center; border:1px solid #eee; }
-.product-item img{ width:60px; height:60px; object-fit:contain; background:#f1f8e9; border-radius:8px; }
+.product-item img{ width:60px; height:60px; object-fit:cover; background:#f1f8e9; border-radius:8px; }
 @media(min-width:768px){ .product-grid{ grid-template-columns:repeat(3,1fr);} }
 @media(max-width:600px){ .stats{ grid-template-columns:1fr; } }
 </style>
@@ -151,10 +179,10 @@ include 'header.php';
                     <div>
                         <label style="font-weight:700; font-size:0.9rem;">Category</label>
                         <select name="category" style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;">
-                            <option value="gulay">Gulay</option>
-                            <option value="prutas">Prutas</option>
-                            <option value="bigas">Bigas</option>
-                            <option value="itlog">Itlog</option>
+                            <option value="Gulay">Gulay</option>
+                            <option value="Prutas">Prutas</option>
+                            <option value="Bigas">Bigas</option>
+                            <option value="Itlog">Itlog</option>
                         </select>
                     </div>
                     <div>
@@ -180,7 +208,7 @@ include 'header.php';
                     $src = $img ? (strpos($img,'http')===0 ? $img : '/'.ltrim($img,'/')) : '/images/sili.jpg';
                 ?>
                 <div class="product-item">
-                    <img src="<?php echo htmlspecialchars($src); ?>" alt="">
+                    <img src="<?php echo htmlspecialchars($src); ?>" alt="" onerror="this.src='https://via.placeholder.com/60'">
                     <div style="flex:1;">
                         <div style="font-weight:700; font-size:0.9rem;"><?php echo htmlspecialchars($p['name']); ?></div>
                         <div style="color:#2a9d8f; font-weight:800;">₱<?php echo number_format($p['price'] ?? 0,2); ?></div>
