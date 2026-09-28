@@ -1,4 +1,6 @@
 <?php
+ob_start();
+ini_set('session.save_path', sys_get_temp_dir());
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
@@ -10,7 +12,7 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
     try{
         if($is_pdo){
             $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-            $st->execute([$uid_cookie]);
+            $st->execute(array($uid_cookie));
             $u = $st->fetch(PDO::FETCH_ASSOC);
         } else {
             $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
@@ -22,8 +24,8 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
         if($u){
             $_SESSION['user_id'] = $u['id'];
             $_SESSION['user_name'] = $u['username'];
-            $_SESSION['role'] = $u['role'] ?? 'buyer';
-            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+            $_SESSION['role'] = isset($u['role']) ? $u['role'] : 'buyer';
+            $_SESSION['is_admin'] = isset($u['is_admin']) ? $u['is_admin'] : 0;
         }
     }catch(Exception $e){}
 }
@@ -32,15 +34,15 @@ if (!isset($_SESSION['user_id']) && !isset($_COOKIE['user_id'])) {
     header('Location: login.php'); exit();
 }
 
-$user_id = (int)($_SESSION['user_id'] ?? $_COOKIE['user_id'] ?? 0);
-$user_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Buyer';
-$role = $_SESSION['role'] ?? $_COOKIE['role'] ?? 'buyer';
+$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($_COOKIE['user_id']) ? (int)$_COOKIE['user_id'] : 0);
+$user_name = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : (isset($_COOKIE['user_name']) ? $_COOKIE['user_name'] : 'Buyer');
+$role = isset($_SESSION['role']) ? $_SESSION['role'] : (isset($_COOKIE['role']) ? $_COOKIE['role'] : 'buyer');
 
 if ($user_id === 0) { header('Location: login.php'); exit(); }
 
-// kung farmer ka, dun ka sa farmer centre
-if ($role === 'farmer') { header('Location: farmer_centre.php'); exit(); }
-if (($_SESSION['is_admin'] ?? 0) == 1) { header('Location: admin/index.php'); exit(); }
+// FIXED: farmer_centre.php is deleted, redirect to new dashboard
+if (strtolower($role) === 'farmer' || strtolower($role) === 'seller') { header('Location: farmer_dashboard.php'); exit(); }
+if ((isset($_SESSION['is_admin']) ? $_SESSION['is_admin'] : 0) == 1) { header('Location: admin/index.php'); exit(); }
 
 try {
     if ($is_pgsql) {
@@ -56,55 +58,64 @@ $total_orders = 0; $total_spent = 0; $pending_orders = 0;
 try {
     if($is_pdo){
         $s=$conn->prepare("SELECT COUNT(*) as c, SUM(total_amount) as total FROM orders WHERE user_id=?");
-        $s->execute([$user_id]);
+        $s->execute(array($user_id));
         $r=$s->fetch(PDO::FETCH_ASSOC);
-        $total_orders = $r['c'] ?? 0; $total_spent = $r['total'] ?? 0;
+        $total_orders = isset($r['c']) ? $r['c'] : 0; $total_spent = isset($r['total']) ? $r['total'] : 0;
 
         $s=$conn->prepare("SELECT COUNT(*) FROM orders WHERE user_id=? AND status IN ('pending','to_ship')");
-        $s->execute([$user_id]);
+        $s->execute(array($user_id));
         $pending_orders = (int)$s->fetchColumn();
     } else {
         $s=$conn->prepare("SELECT COUNT(*) as c, SUM(total_amount) as total FROM orders WHERE user_id=?");
         $s->bind_param("i",$user_id); $s->execute(); $r=$s->get_result()->fetch_assoc();
-        $total_orders = $r['c']??0; $total_spent = $r['total']??0; $s->close();
+        $total_orders = isset($r['c']) ? $r['c'] : 0; $total_spent = isset($r['total']) ? $r['total'] : 0; $s->close();
 
         $s=$conn->prepare("SELECT COUNT(*) as c FROM orders WHERE user_id=? AND status IN ('pending','to_ship')");
         $s->bind_param("i",$user_id); $s->execute(); $r=$s->get_result()->fetch_assoc();
-        $pending_orders = $r['c']??0; $s->close();
+        $pending_orders = isset($r['c']) ? $r['c'] : 0; $s->close();
     }
 } catch(Exception $e){}
 
-$filter = $_GET['filter'] ?? 'all';
-$allowed = ['all','pending','to_ship','shipped','completed','cancelled'];
+$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
+$allowed = array('all','pending','to_ship','shipped','completed','cancelled');
 if(!in_array($filter,$allowed)) $filter='all';
 
 include 'header.php';
 ?>
 <style>
-.b-wrap{ max-width:1120px; margin:20px auto; padding:0 16px; }
-.b-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px; }
-.b-tabs{ background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:12px 14px; margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap; }
-@media(max-width:900px){ .b-stats{ grid-template-columns:1fr; } }
+:root{ --green:#2a9d8f; --dark:#1a2e35; }
+.b-wrap{ max-width:1120px; margin:0 auto; padding:16px; }
+.b-hero{ background: linear-gradient(135deg,#1a2e35 0%,#2a9d8f 100%); color:#fff; border-radius:20px; padding:24px; margin-bottom:16px; }
+.b-hero h1{ margin:0; font-size:clamp(1.5rem,5vw,2rem); font-weight:900; }
+.b-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
+.b-stat{ background:#fff; border:1px solid #eef2ee; border-radius:16px; padding:16px; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.04); }
+.b-tabs{ background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:10px; margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap; overflow-x:auto; }
+.b-card{ background:#fff; border:1px solid #e5e5e5; border-radius:16px; padding:18px; }
+.b-order{ border:1px solid #eee; border-radius:12px; padding:14px; margin-bottom:12px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+@media(max-width:900px){ .b-stats{ grid-template-columns:1fr; } .b-wrap{ padding:10px; } }
 </style>
 <div class="b-wrap">
-    <div style="background:#fff; border:1px solid #e5e5e5; border-radius:16px; padding:28px; margin-bottom:20px;">
-        <h1 style="font-size:clamp(1.6rem,4vw,2.4rem); font-weight:900; margin:0;"><i class="fas fa-shopping-bag" style="color:#2a9d8f;"></i> Buyer Dashboard</h1>
-        <p style="color:#666; margin-top:8px;">Welcome, <?= htmlspecialchars($user_name) ?>! Track mo orders mo dito.</p>
+    <div class="b-hero">
+        <h1>🛒 Buyer Dashboard</h1>
+        <p style="margin:6px 0 0 0; opacity:0.9;">Welcome, <?php echo htmlspecialchars($user_name); ?>! Track mo orders mo dito.</p>
         <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-            <a href="products.php" style="background:#111; color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; font-weight:800;"><i class="fas fa-store"></i> Browse Products</a>
-            <a href="cart.php" style="background:#fff; border:1.5px solid #111; color:#111; padding:10px 18px; border-radius:10px; text-decoration:none; font-weight:800;"><i class="fas fa-shopping-cart"></i> My Cart</a>
+            <a href="products.php" style="background:#fff; color:#1a2e35; padding:10px 18px; border-radius:10px; text-decoration:none; font-weight:800;"><i class="fas fa-store"></i> Browse Products</a>
+            <a href="cart.php" style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; font-weight:800;"><i class="fas fa-shopping-cart"></i> My Cart</a>
         </div>
     </div>
 
     <div class="b-stats">
-        <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#2a9d8f;"><?= $total_orders ?></p><p style="font-weight:800;">Total Orders</p>
+        <div class="b-stat">
+            <div style="font-size:0.75rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Total Orders</div>
+            <div style="font-size:2rem; font-weight:900; color:#2a9d8f; margin-top:4px;"><?php echo $total_orders; ?></div>
         </div>
-        <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#e76f51;"><?= $pending_orders ?></p><p style="font-weight:800;">Pending / To Ship</p>
+        <div class="b-stat">
+            <div style="font-size:0.75rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Pending / To Ship</div>
+            <div style="font-size:2rem; font-weight:900; color:#e76f51; margin-top:4px;"><?php echo $pending_orders; ?></div>
         </div>
-        <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px; text-align:center;">
-            <p style="font-size:2rem; font-weight:900; margin:0; color:#1a2e35;">₱<?= number_format($total_spent, 2) ?></p><p style="font-weight:800;">Total Spent</p>
+        <div class="b-stat">
+            <div style="font-size:0.75rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Total Spent</div>
+            <div style="font-size:1.6rem; font-weight:900; color:#1a2e35; margin-top:4px;">₱<?php echo number_format($total_spent, 2); ?></div>
         </div>
     </div>
 
@@ -118,18 +129,18 @@ include 'header.php';
         ?>
     </div>
 
-    <div style="background:#fff; border:1px solid #e5e5e5; border-radius:14px; padding:20px;">
+    <div class="b-card">
         <h3 style="font-weight:900; margin:0 0 14px 0;">My Orders</h3>
         <?php
         try {
-            $rows=[];
+            $rows=array();
             if($is_pdo){
                 if($filter=='all'){
                     $s=$conn->prepare("SELECT id, total_amount, status, tracking_number, courier, created_at FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 100");
-                    $s->execute([$user_id]);
+                    $s->execute(array($user_id));
                 } else {
                     $s=$conn->prepare("SELECT id, total_amount, status, tracking_number, courier, created_at FROM orders WHERE user_id=? AND status=? ORDER BY id DESC LIMIT 100");
-                    $s->execute([$user_id,$filter]);
+                    $s->execute(array($user_id,$filter));
                 }
                 $rows=$s->fetchAll(PDO::FETCH_ASSOC);
             } else {
@@ -151,7 +162,7 @@ include 'header.php';
                 foreach($rows as $o){
                     $status=$o['status'];
                     $badge=$status=='pending'?'#ff9800':($status=='to_ship'?'#2196f3':($status=='shipped'?'#9c27b0':($status=='completed'?'#00b050':'#999')));
-                    echo '<div style="border:1px solid #eee; border-radius:12px; padding:14px; margin-bottom:12px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">';
+                    echo '<div class="b-order">';
                     echo '<div><b>Order #'.$o['id'].'</b> <span style="background:'.$badge.'; color:#fff; padding:3px 10px; border-radius:20px; font-size:0.7rem; font-weight:800;">'.$status.'</span>';
                     if(!empty($o['tracking_number'])) echo '<span style="background:#111; color:#fff; padding:3px 10px; border-radius:8px; font-size:0.7rem; margin-left:6px;">'.$o['tracking_number'].' - '.$o['courier'].'</span>';
                     echo '<br><span style="font-size:0.85rem; color:#666;">'.$o['created_at'].'</span></div>';
@@ -159,7 +170,7 @@ include 'header.php';
                     echo '</div>';
                 }
             }
-        } catch(Exception $e){ echo '<p style="color:#666;">No orders found</p>'; }
+        } catch(Exception $e){ echo '<p style="color:#666;">No orders found: '.htmlspecialchars($e->getMessage()).'</p>'; }
         ?>
     </div>
 </div>
