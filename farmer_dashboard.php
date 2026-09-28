@@ -1,224 +1,413 @@
 <?php
+ob_start();
+ini_set('session.save_path', sys_get_temp_dir());
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
+$is_pdo = $conn instanceof PDO;
+$is_pgsql = $is_pdo && $conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
 
+// Restore session from cookie (Vercel)
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
-    $uid_cookie = $_COOKIE['user_id'];
+    $uid_cookie = (int)$_COOKIE['user_id'];
     try{
-        $is_tmp = $conn instanceof PDO;
-        if($is_tmp){
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
-            $st->execute([$uid_cookie]);
+        if($is_pdo){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
+            $st->execute(array($uid_cookie));
             $u = $st->fetch(PDO::FETCH_ASSOC);
         } else {
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
             $st->bind_param("i", $uid_cookie);
             $st->execute();
             $u = $st->get_result()->fetch_assoc();
+            $st->close();
         }
         if($u){
             $_SESSION['user_id'] = $u['id'];
             $_SESSION['user_name'] = $u['username'];
-            $_SESSION['role'] = $u['role'] ?? 'farmer';
-            $_SESSION['is_admin'] = $u['is_admin'] ?? 0;
+            $_SESSION['role'] = isset($u['role'])? $u['role'] : 'farmer';
+            $_SESSION['is_admin'] = isset($u['is_admin'])? $u['is_admin'] : 0;
         }
     }catch(Exception $e){}
 }
 
-if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_COOKIE['user_id'])) {
+if (!isset($_SESSION['user_id']) &&!isset($_SESSION['user']) &&!isset($_COOKIE['user_id'])) {
     header("Location: login.php"); exit();
 }
+$user_id = (int)(isset($_SESSION['user_id'])? $_SESSION['user_id'] : (isset($_SESSION['user']['id'])? $_SESSION['user']['id'] : (isset($_COOKIE['user_id'])? $_COOKIE['user_id'] : 0)));
+$user_name = isset($_SESSION['user_name'])? $_SESSION['user_name'] : (isset($_SESSION['user']['username'])? $_SESSION['user']['username'] : (isset($_COOKIE['user_name'])? $_COOKIE['user_name'] : 'Farmer'));
+$user_role = isset($_SESSION['role'])? $_SESSION['role'] : (isset($_SESSION['user']['role'])? $_SESSION['user']['role'] : (isset($_COOKIE['role'])? $_COOKIE['role'] : 'farmer'));
+if ($user_id === 0) { header("Location: login.php"); exit(); }
 
-$user_id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? $_COOKIE['user_id'] ?? 0);
-$user_role = $_SESSION['role'] ?? $_SESSION['user']['role'] ?? $_COOKIE['role'] ?? 'farmer';
+if (!function_exists('addTracking')) {
+    function addTracking($conn, $oid, $status, $loc, $desc){
+        try {
+            $is_pdo = $conn instanceof PDO;
+            if($is_pdo){
+                $conn->exec("CREATE TABLE IF NOT EXISTS order_tracking (id SERIAL PRIMARY KEY, order_id INT, status VARCHAR(50), location VARCHAR(255), description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+                $s=$conn->prepare("INSERT INTO order_tracking (order_id,status,location,description) VALUES (?,?,?,?)");
+                $s->execute(array($oid,$status,$loc,$desc));
+            } else {
+                $conn->query("CREATE TABLE IF NOT EXISTS order_tracking (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, status VARCHAR(50), location VARCHAR(255), description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+                $s=$conn->prepare("INSERT INTO order_tracking (order_id,status,location,description) VALUES (?,?,?,?)");
+                $s->bind_param("isss",$oid,$status,$loc,$desc);
+                $s->execute(); $s->close();
+            }
+        } catch(Exception $e){}
+    }
+}
 
-$is_pdo = $conn instanceof PDO;
+// Create tables
+try {
+    if ($is_pgsql) {
+        $conn->exec("CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0, category VARCHAR(50) DEFAULT 'Gulay', description TEXT)");
+        $conn->exec("CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, user_id INT, customer_name VARCHAR(255), phone VARCHAR(50), address TEXT, total_amount DECIMAL(10,2), payment_method VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', tracking_number VARCHAR(50), courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress', farmer_lat DECIMAL(10,7) DEFAULT 14.3320, farmer_lng DECIMAL(10,7) DEFAULT 121.0850, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+        $conn->exec("CREATE TABLE IF NOT EXISTS order_items (id SERIAL PRIMARY KEY, order_id INT, product_id INT, product_name VARCHAR(255), price DECIMAL(10,2), quantity INT, farmer_id INT NULL)");
+    } else {
+        $conn->query("CREATE TABLE IF NOT EXISTS products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), farmer_name VARCHAR(100), price DECIMAL(10,2), unit VARCHAR(20), image_url TEXT, farmer_id INT, user_id INT, stock INT DEFAULT 0, category VARCHAR(50) DEFAULT 'Gulay', description TEXT)");
+        $conn->query("CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, customer_name VARCHAR(255), phone VARCHAR(50), address TEXT, total_amount DECIMAL(10,2), payment_method VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', tracking_number VARCHAR(50), courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress', farmer_lat DECIMAL(10,7) DEFAULT 14.3320, farmer_lng DECIMAL(10,7) DEFAULT 121.0850, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+        $conn->query("CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, product_id INT, product_name VARCHAR(255), price DECIMAL(10,2), quantity INT, farmer_id INT NULL)");
+    }
+} catch(Exception $e){}
+
 $message = "";
+$message_type = "success";
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_product'])) {
-    $name = trim($_POST['name'] ?? '');
-    $price = floatval($_POST['price'] ?? 0);
-    $stock = intval($_POST['stock'] ?? 0);
-    $category = trim($_POST['category'] ?? 'gulay');
-    $description = trim($_POST['description'] ?? '');
-    $image_url = '';
+if (isset($_POST['add_product'])) {
+    $name = isset($_POST['name'])? trim($_POST['name']) : '';
+    $price = isset($_POST['price'])? (float)$_POST['price'] : 0;
+    $unit = isset($_POST['unit'])? trim($_POST['unit']) : 'kg';
+    $stock = isset($_POST['stock'])? (int)$_POST['stock'] : 0;
+    $category = isset($_POST['category'])? trim($_POST['category']) : 'Gulay';
+    $description = isset($_POST['description'])? trim($_POST['description']) : '';
+    $image = isset($_POST['image_url'])? trim($_POST['image_url']) : '';
 
-    if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
+    if(isset($_FILES['image']) && $_FILES['image']['error'] == 0){
         $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-        $allowed = ['jpg','jpeg','png','webp'];
-        if (in_array($ext, $allowed)) {
-            $safe_name = strtolower(preg_replace('/[^a-z0-9]+/','_', $name)) . '_' . time() . '.' . $ext;
-            $target_dir = __DIR__ . '/images/';
-            if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-            $target = $target_dir . $safe_name;
-            if (move_uploaded_file($_FILES['image']['tmp_name'], $target)) {
-                $image_url = 'images/' . $safe_name;
+        if(in_array($ext, array('jpg','jpeg','png','webp'))){
+            if(is_writable(__DIR__)){
+                $uploadDir = __DIR__.'/uploads';
+                @mkdir($uploadDir, 0777, true);
+                $imagesDir = __DIR__.'/images';
+                @mkdir($imagesDir, 0777, true);
+                $newName = 'prod_'.$user_id.'_'.time().'_'.rand(100,999).'.'.$ext;
+                $dest = $uploadDir.'/'.$newName;
+                if(@move_uploaded_file($_FILES['image']['tmp_name'], $dest)){
+                    $image = 'uploads/'.$newName;
+                } else {
+                    $dest2 = $imagesDir.'/'.$newName;
+                    if(@move_uploaded_file($_FILES['image']['tmp_name'], $dest2)){
+                        $image = 'images/'.$newName;
+                    }
+                }
+            }
+            if(empty($image)){
+                $tmpData = @file_get_contents($_FILES['image']['tmp_name']);
+                if($tmpData && strlen($tmpData) < 3000000){
+                    $b64 = base64_encode($tmpData);
+                    $prefix = 'data:'. 'image/'. $ext. ';base64,';
+                    $image = $prefix. $b64;
+                }
             }
         }
-    } elseif(!empty($_POST['image_url'])){
-        $image_url = trim($_POST['image_url']);
     }
 
-    if ($name !== '' && $price > 0) {
+    if ($name!== '' && $price > 0) {
         try {
-            if ($is_pdo) {
-                try {
-                    $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, stock, category, description, image_url, farmer_id, user_id, unit) VALUES (?,?,?,?,?,?,?,?,?,?)");
-                    $farmer_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
-                    $stmt->execute([$name, $farmer_name, $price, $stock, $category, $description, $image_url, $user_id, $user_id, 'kg']);
-                } catch(Exception $e){
-                    $stmt = $conn->prepare("INSERT INTO products (name, price, image_url) VALUES (?,?,?)");
-                    $stmt->execute([$name, $price, $image_url]);
-                }
-                $message = "Product added!";
+            if($is_pdo){
+                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock, category, description) VALUES (?,?,?,?,?,?,?,?,?,?)");
+                $stmt->execute(array($name,$user_name,$price,$unit,$image,$user_id,$user_id,$stock,$category,$description));
             } else {
-                $farmer_name = $_SESSION['user_name'] ?? $_COOKIE['user_name'] ?? 'Farmer';
-                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, stock, category, description, image_url, farmer_id, user_id, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                if ($stmt) {
-                    $unit = 'kg';
-                    $stmt->bind_param("ssdisssiss", $name, $farmer_name, $price, $stock, $category, $description, $image_url, $user_id, $user_id, $unit);
-                    if ($stmt->execute()) $message = "Product added!";
-                    $stmt->close();
-                } else {
-                    $stmt = $conn->prepare("INSERT INTO products (name, price, image_url) VALUES (?,?,?)");
-                    $stmt->bind_param("sds", $name, $price, $image_url);
-                    if ($stmt->execute()) $message = "Product added!";
-                    $stmt->close();
-                }
+                $stmt = $conn->prepare("INSERT INTO products (name, farmer_name, price, unit, image_url, farmer_id, user_id, stock, category, description) VALUES (?,?,?,?,?,?,?,?,?,?)");
+                $stmt->bind_param("ssdssiiiss", $name, $user_name, $price, $unit, $image, $user_id, $user_id, $stock, $category, $description);
+                $stmt->execute(); $stmt->close();
             }
+            $message = $name." na-add na!";
+            $message_type = "success";
+            header('Location: farmer_dashboard.php?msg='.urlencode($message)); exit();
         } catch(Exception $e){
-            $message = "Error: " . $e->getMessage();
+            $message = "Error: ".$e->getMessage();
+            $message_type = "error";
         }
     }
 }
 
-$my_products = [];
-$total_products = 0;
-try {
-    if ($is_pdo) {
-        try {
-            $stmt = $conn->prepare("SELECT id, name, price, stock, image_url FROM products WHERE farmer_id = ? OR user_id = ? ORDER BY id DESC");
-            $stmt->execute([$user_id, $user_id]);
-            $my_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch(Exception $e){
-            $stmt = $conn->query("SELECT id, name, price, image_url FROM products ORDER BY id DESC LIMIT 20");
-            $my_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
-        $total_products = count($my_products);
-    } else {
-        $stmt = $conn->prepare("SELECT id, name, price, stock, image_url FROM products WHERE farmer_id = ? OR user_id = ? ORDER BY id DESC");
-        if ($stmt) {
-            $stmt->bind_param("ii", $user_id, $user_id);
-            $stmt->execute();
-            $res = $stmt->get_result();
-            while($r = $res->fetch_assoc()) $my_products[] = $r;
-            $stmt->close();
+if (isset($_GET['delete'])) {
+    $del_id = (int)$_GET['delete'];
+    try {
+        if($is_pdo){
+            $stmt=$conn->prepare("DELETE FROM products WHERE id=? AND (farmer_id=? OR user_id=?)");
+            $stmt->execute(array($del_id,$user_id,$user_id));
         } else {
-            $res = $conn->query("SELECT id, name, price, image_url FROM products ORDER BY id DESC LIMIT 20");
-            while($r = $res->fetch_assoc()) $my_products[] = $r;
+            $stmt = $conn->prepare("DELETE FROM products WHERE id =? AND (farmer_id =? OR user_id =?)");
+            $stmt->bind_param("iii", $del_id, $user_id, $user_id);
+            $stmt->execute(); $stmt->close();
         }
-        $total_products = count($my_products);
+    } catch(Exception $e){}
+    header('Location: farmer_dashboard.php'); exit();
+}
+
+if (isset($_GET['action']) && isset($_GET['id'])) {
+    $oid = (int)$_GET['id'];
+    $act = $_GET['action'];
+    try {
+        if($is_pdo){
+            if($act=='confirm'){
+                $s=$conn->prepare("UPDATE orders SET status='to_ship' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->execute(array($oid,$user_id));
+                addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order');
+            } elseif($act=='ship'){
+                $track = 'SPXPH'.rand(1000000000,9999999999);
+                $s=$conn->prepare("UPDATE orders SET status='shipped', tracking_number=?, courier='BUKID2BAYAN Xpress' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->execute(array($track,$oid,$user_id));
+                addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel $track shipped");
+            } elseif($act=='complete'){
+                $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->execute(array($oid,$user_id));
+                addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered');
+            } elseif($act=='cancel'){
+                $s=$conn->prepare("UPDATE orders SET status='cancelled' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->execute(array($oid,$user_id));
+                addTracking($conn, $oid, 'cancelled', 'Cancelled', 'Order cancelled by farmer');
+            }
+        } else {
+            if($act=='confirm'){
+                $s=$conn->prepare("UPDATE orders SET status='to_ship' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
+                addTracking($conn, $oid, 'to_ship', 'Binan Farmer Centre', 'Seller confirmed order');
+            } elseif($act=='ship'){
+                $track = 'SPXPH'.rand(1000000000,9999999999);
+                $s=$conn->prepare("UPDATE orders SET status='shipped', tracking_number=?, courier='BUKID2BAYAN Xpress' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->bind_param("sii",$track,$oid,$user_id); $s->execute(); $s->close();
+                addTracking($conn, $oid, 'shipped', 'Binan Sorting Hub', "Parcel $track shipped");
+            } elseif($act=='complete'){
+                $s=$conn->prepare("UPDATE orders SET status='completed' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
+                addTracking($conn, $oid, 'completed', 'Buyer Location', 'Parcel delivered');
+            } elseif($act=='cancel'){
+                $s=$conn->prepare("UPDATE orders SET status='cancelled' WHERE id=? AND id IN (SELECT order_id FROM order_items WHERE farmer_id=?)");
+                $s->bind_param("ii",$oid,$user_id); $s->execute(); $s->close();
+                addTracking($conn, $oid, 'cancelled', 'Cancelled', 'Order cancelled by farmer');
+            }
+        }
+    } catch(Exception $e){}
+    header('Location: farmer_dashboard.php?tab=orders&filter='.$act); exit();
+}
+
+$total_products = 0; $total_orders = 0; $total_earnings = 0; $pending_orders = 0;
+$my_products = array();
+try {
+    if($is_pdo){
+        $stmt=$conn->prepare("SELECT COUNT(*) FROM products WHERE farmer_id=? OR user_id=?");
+        $stmt->execute(array($user_id,$user_id));
+        $total_products = (int)$stmt->fetchColumn();
+        $stmt=$conn->prepare("SELECT COUNT(DISTINCT order_id) as c, SUM(price*quantity) as total FROM order_items WHERE farmer_id=?");
+        $stmt->execute(array($user_id));
+        $r=$stmt->fetch(PDO::FETCH_ASSOC);
+        $total_orders = isset($r['c'])? $r['c'] : 0;
+        $total_earnings = isset($r['total'])? $r['total'] : 0;
+        $stmt=$conn->prepare("SELECT COUNT(DISTINCT oi.order_id) FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? AND o.status='pending'");
+        $stmt->execute(array($user_id));
+        $pending_orders = (int)$stmt->fetchColumn();
+        $stmt=$conn->prepare("SELECT id, name, price, unit, stock, category, image_url FROM products WHERE farmer_id=? OR user_id=? ORDER BY id DESC");
+        $stmt->execute(array($user_id,$user_id));
+        $my_products=$stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmt = $conn->prepare("SELECT COUNT(*) as c FROM products WHERE farmer_id =? OR user_id =?");
+        $stmt->bind_param("ii", $user_id, $user_id);
+        $stmt->execute(); $res=$stmt->get_result();
+        if($res) $total_products=$res->fetch_assoc()['c']; $stmt->close();
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT order_id) as c, SUM(price*quantity) as total FROM order_items WHERE farmer_id=?");
+        $stmt->bind_param("i",$user_id); $stmt->execute(); $res=$stmt->get_result();
+        if($res){ $r=$res->fetch_assoc(); $total_orders=isset($r['c'])?$r['c']:0; $total_earnings=isset($r['total'])?$r['total']:0; }
+        $stmt->close();
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT oi.order_id) as c FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? AND o.status='pending'");
+        $stmt->bind_param("i",$user_id); $stmt->execute(); $res=$stmt->get_result();
+        if($res) $pending_orders=$res->fetch_assoc()['c']; $stmt->close();
+        $stmt = $conn->prepare("SELECT id, name, price, unit, stock, category, image_url FROM products WHERE farmer_id =? OR user_id =? ORDER BY id DESC");
+        $stmt->bind_param("ii", $user_id, $user_id);
+        $stmt->execute(); $res=$stmt->get_result();
+        while($r=$res->fetch_assoc()) $my_products[]=$r;
+        $stmt->close();
     }
 } catch(Exception $e){}
+
+$filter = isset($_GET['filter'])? $_GET['filter'] : 'all';
+$allowed = array('all','pending','to_ship','shipped','completed','cancelled');
+if(!in_array($filter,$allowed)) $filter='all';
+$tab = isset($_GET['tab'])? $_GET['tab'] : 'products';
+if(!in_array($tab, array('products','orders','add'))) $tab='products';
+if(isset($_GET['msg'])) { $message = $_GET['msg']; $message_type='success'; }
+
 include 'header.php';
 ?>
 <style>
-.dashboard{ max-width:1200px; margin:0 auto; padding:24px 16px; }
-.stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
-.stat{ background:rgba(255,255,255,0.92); border-radius:14px; padding:18px; box-shadow:0 4px 16px rgba(0,0,0,0.06); }
-.form-card{ background:rgba(255,255,255,0.92); border-radius:16px; padding:20px; margin-bottom:24px; box-shadow:0 4px 16px rgba(0,0,0,0.06); }
-.product-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-.product-item{ background:#fff; border-radius:12px; padding:12px; display:flex; gap:10px; align-items:center; border:1px solid #eee; }
-.product-item img{ width:60px; height:60px; object-fit:cover; background:#f1f8e9; border-radius:8px; }
-@media(min-width:768px){ .product-grid{ grid-template-columns:repeat(3,1fr);} }
-@media(max-width:600px){ .stats{ grid-template-columns:1fr; } }
+:root{ --green:#2a9d8f; --dark:#1a2e35; --light:#f6fbf9; --orange:#e76f51; --yellow:#f4a261; }
+.fd-wrap{ max-width:1220px; margin:0 auto; padding:16px; }
+.fd-hero{ background: linear-gradient(135deg,#1a2e35 0%,#2a9d8f 100%); color:#fff; border-radius:20px; padding:24px; margin-bottom:16px; position:relative; overflow:hidden; }
+.fd-hero h1{ margin:0; font-size:clamp(1.5rem,5vw,2rem); font-weight:900; }
+.fd-hero p{ margin:6px 0 0 0; opacity:0.9; }
+.fd-stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+.fd-stat{ background:#fff; border-radius:16px; padding:16px; border:1px solid #eef2ee; box-shadow:0 2px 10px rgba(0,0,0,0.04); }
+.fd-stat.label{ font-size:0.75rem; color:#6b7280; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+.fd-stat.val{ font-size:1.7rem; font-weight:900; margin-top:4px; }
+.fd-nav{ background:#fff; border-radius:16px; padding:8px; display:flex; gap:8px; margin-bottom:16px; border:1px solid #e5e5e5; overflow-x:auto; }
+.fd-nav a{ flex:1; min-width:110px; text-align:center; padding:12px 10px; border-radius:12px; text-decoration:none; font-weight:800; font-size:0.9rem; transition:0.2s; white-space:nowrap; }
+.fd-nav a.active{ background:#111; color:#fff; }
+.fd-nav a:not(.active){ background:#f5f7f5; color:#333; }
+.fd-card{ background:#fff; border-radius:16px; border:1px solid #e5e5e5; padding:18px; margin-bottom:16px; }
+.fd-form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.fd-input{ width:100%; padding:12px; border:1.5px solid #ddd; border-radius:10px; font-weight:600; outline:none; }
+.fd-input:focus{ border-color:var(--green); }
+.fd-product-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+.fd-prod{ background:#fff; border:1px solid #eee; border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+.fd-prod img{ width:100%; height:140px; object-fit:cover; background:#f1f8e9; }
+.fd-prod-body{ padding:10px; flex:1; }
+.fd-order{ border:1px solid #eee; border-radius:12px; padding:12px; margin-bottom:10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.fd-badge{ padding:3px 10px; border-radius:20px; font-size:0.7rem; font-weight:800; color:#fff; }
+@media(max-width:900px){.fd-stats{ grid-template-columns:repeat(2,1fr); }.fd-form-grid{ grid-template-columns:1fr; }.fd-wrap{ padding:10px; } }
+@media(max-width:600px){.fd-stats{ grid-template-columns:1fr; }.fd-product-grid{ grid-template-columns:repeat(2,1fr); } }
 </style>
-<div class="dashboard">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
-        <div>
-            <h1 style="margin:0; font-weight:900; color:#1a2e35;">Farmer / Seller Dashboard</h1>
-            <p style="margin:4px 0 0 0; color:#666;">Manage your ani at benta</p>
+<div class="fd-wrap">
+    <?php if($message):?>
+        <div style="background:<?php echo $message_type=='success'?'#e6f7f5':'#fdecea';?>; border:1.5px solid <?php echo $message_type=='success'?'#2a9d8f':'#e76f51';?>; color:#0f3d37; padding:14px; border-radius:12px; margin-bottom:14px; text-align:center; font-weight:800;">
+            <?php echo htmlspecialchars($message);?>
         </div>
-        <a href="index.php" style="background:#111; color:#fff; padding:10px 18px; border-radius:8px; text-decoration:none; font-weight:700;">View Shop</a>
-    </div>
-    <?php if($message): ?>
-    <div style="background:#e6f7f4; border:1px solid #2a9d8f; color:#1a2e35; padding:12px; border-radius:8px; margin-bottom:16px;"><?php echo htmlspecialchars($message); ?></div>
-    <?php endif; ?>
-    <div class="stats">
-        <div class="stat">
-            <div style="color:#666; font-size:0.85rem;">Total Products</div>
-            <div style="font-size:1.8rem; font-weight:900; color:#234723;"><?php echo $total_products; ?></div>
-        </div>
-        <div class="stat">
-            <div style="color:#666; font-size:0.85rem;">Pending Orders</div>
-            <div style="font-size:1.8rem; font-weight:900; color:#d97706;">0</div>
-        </div>
-        <div class="stat">
-            <div style="color:#666; font-size:0.85rem;">Total Sales</div>
-            <div style="font-size:1.8rem; font-weight:900; color:#2a9d8f;">₱0.00</div>
+    <?php endif;?>
+
+    <div class="fd-hero">
+        <h1>🌾 Hi, <?php echo htmlspecialchars($user_name);?>!</h1>
+        <p>Manage mo ani mo, orders, at kita — lahat nasa isang dashboard lang.</p>
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="index.php" style="background:#fff; color:#1a2e35; padding:8px 14px; border-radius:8px; text-decoration:none; font-weight:800; font-size:0.85rem;">🛒 View Shop</a>
+            <span style="background:rgba(255,255,255,0.2); padding:8px 14px; border-radius:8px; font-size:0.85rem;">Bukid to Bayan • Farmer Dashboard</span>
         </div>
     </div>
-    <div style="display:grid; grid-template-columns:1fr; gap:24px;">
-        <div class="form-card">
-            <h3 style="margin:0 0 14px 0;"><i class="fas fa-plus" style="color:#2a9d8f;"></i> Magdagdag ng Product</h3>
-            <form method="post" enctype="multipart/form-data">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div style="grid-column:1/-1;">
-                        <label style="font-weight:700; font-size:0.9rem;">Product Name</label>
-                        <input type="text" name="name" required placeholder="Sili Labuyo, Eggplant, Bigas" style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;">
-                    </div>
-                    <div>
-                        <label style="font-weight:700; font-size:0.9rem;">Price (₱)</label>
-                        <input type="number" step="0.01" name="price" required placeholder="50.00" style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;">
-                    </div>
-                    <div>
-                        <label style="font-weight:700; font-size:0.9rem;">Stock (kg/pcs)</label>
-                        <input type="number" name="stock" required placeholder="100" style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;">
-                    </div>
-                    <div>
-                        <label style="font-weight:700; font-size:0.9rem;">Category</label>
-                        <select name="category" style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;">
-                            <option value="Gulay">Gulay</option>
-                            <option value="Prutas">Prutas</option>
-                            <option value="Bigas">Bigas</option>
-                            <option value="Itlog">Itlog</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-weight:700; font-size:0.9rem;">Image</label>
-                        <input type="file" name="image" accept="image/*" style="width:100%; padding:8px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;">
-                    </div>
-                    <div style="grid-column:1/-1;">
-                        <label style="font-weight:700; font-size:0.9rem;">Description</label>
-                        <textarea name="description" rows="2" placeholder="Fresh from farm..." style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:8px; margin-top:6px;"></textarea>
-                    </div>
+
+    <div class="fd-stats">
+        <div class="fd-stat"><div class="label">📦 My Products</div><div class="val" style="color:var(--green);"><?php echo $total_products;?></div></div>
+        <div class="fd-stat"><div class="label">⏳ Pending Orders</div><div class="val" style="color:#f59e0b;"><?php echo $pending_orders;?></div></div>
+        <div class="fd-stat"><div class="label">🚚 Total Orders</div><div class="val" style="color:var(--orange);"><?php echo $total_orders;?></div></div>
+        <div class="fd-stat"><div class="label">💰 Earnings</div><div class="val" style="color:var(--dark);">₱<?php echo number_format($total_earnings,2);?></div></div>
+    </div>
+
+    <div class="fd-nav">
+        <a href="farmer_dashboard.php?tab=products" class="<?php echo $tab=='products'?'active':'';?>">📦 Products</a>
+        <a href="farmer_dashboard.php?tab=orders&filter=all" class="<?php echo $tab=='orders'?'active':'';?>">📋 Orders <?php if($pending_orders>0) echo '('.$pending_orders.')';?></a>
+        <a href="farmer_dashboard.php?tab=add" class="<?php echo $tab=='add'?'active':'';?>">➕ Add Product</a>
+    </div>
+
+    <?php if($tab=='add'):?>
+    <div class="fd-card">
+        <h3 style="margin:0 0 14px 0; font-weight:900;">➕ Magdagdag ng Bagong Product</h3>
+        <form method="post" enctype="multipart/form-data">
+            <div class="fd-form-grid">
+                <div style="grid-column:1/-1;">
+                    <label style="font-weight:700; font-size:0.85rem;">Product Name *</label>
+                    <input type="text" name="name" required placeholder="Ex: Sili Labuyo, Talong, Bigas" class="fd-input" style="margin-top:6px;">
                 </div>
-                <button type="submit" name="add_product" style="margin-top:14px; width:100%; background:#2a9d8f; color:#fff; padding:12px; border:none; border-radius:10px; font-weight:800; cursor:pointer;">Add Product</button>
-            </form>
-        </div>
-        <div class="form-card">
-            <h3 style="margin:0 0 14px 0;">My Products (<?php echo $total_products; ?>)</h3>
-            <?php if(count($my_products)==0): ?>
-                <p style="color:#666; text-align:center; padding:20px;">Wala ka pang product. Magdagdag ka sa taas.</p>
-            <?php else: ?>
-            <div class="product-grid">
-                <?php foreach($my_products as $p):
-                    $img = $p['image_url'] ?? '';
-                    $src = $img ? (strpos($img,'http')===0 ? $img : '/'.ltrim($img,'/')) : '/images/sili.jpg';
-                ?>
-                <div class="product-item">
-                    <img src="<?php echo htmlspecialchars($src); ?>" alt="" onerror="this.src='https://via.placeholder.com/60'">
-                    <div style="flex:1;">
-                        <div style="font-weight:700; font-size:0.9rem;"><?php echo htmlspecialchars($p['name']); ?></div>
-                        <div style="color:#2a9d8f; font-weight:800;">₱<?php echo number_format($p['price'] ?? 0,2); ?></div>
-                        <?php if(isset($p['stock'])): ?><div style="font-size:0.75rem; color:#666;">Stock: <?php echo $p['stock']; ?></div><?php endif; ?>
-                    </div>
-                </div>
-                <?php endforeach; ?>
+                <div><label style="font-weight:700; font-size:0.85rem;">Price (₱) *</label><input type="number" step="0.01" name="price" required value="50" class="fd-input" style="margin-top:6px;"></div>
+                <div><label style="font-weight:700; font-size:0.85rem;">Unit</label><input type="text" name="unit" value="kg" placeholder="kg / pcs / bundle" class="fd-input" style="margin-top:6px;"></div>
+                <div><label style="font-weight:700; font-size:0.85rem;">Stock</label><input type="number" name="stock" value="100" class="fd-input" style="margin-top:6px;"></div>
+                <div><label style="font-weight:700; font-size:0.85rem;">Category</label><select name="category" class="fd-input" style="margin-top:6px;"><option value="Gulay">Gulay</option><option value="Prutas">Prutas</option><option value="Bigas">Bigas</option><option value="Itlog">Itlog</option><option value="Essentials">Essentials</option></select></div>
+                <div style="grid-column:1/-1;"><label style="font-weight:700; font-size:0.85rem;">Description</label><textarea name="description" rows="2" placeholder="Fresh from farm, organic..." class="fd-input" style="margin-top:6px;"></textarea></div>
+                <div style="grid-column:1/-1;"><label style="font-weight:700; font-size:0.85rem;">Product Image</label><input type="file" name="image" accept="image/*" id="imgInput" class="fd-input" style="margin-top:6px;"><div id="preview" style="margin-top:8px; display:none;"><img id="previewImg" style="width:100px; height:100px; object-fit:cover; border-radius:10px; border:1px solid #ddd;"></div></div>
             </div>
-            <?php endif; ?>
-        </div>
+            <button type="submit" name="add_product" style="margin-top:16px; width:100%; background:var(--green); color:#fff; padding:14px; border:none; border-radius:12px; font-weight:900; font-size:1rem; cursor:pointer;">💾 I-save Product</button>
+        </form>
     </div>
+    <script>
+    document.getElementById('imgInput')?.addEventListener('change', function(e){
+        const f = e.target.files[0]; if(!f) return;
+        const r = new FileReader(); r.onload = function(ev){ document.getElementById('previewImg').src = ev.target.result; document.getElementById('preview').style.display='block'; }; r.readAsDataURL(f);
+    });
+    </script>
+    <?php endif;?>
+
+    <?php if($tab=='products'):?>
+    <div class="fd-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 style="margin:0; font-weight:900;">📦 My Products (<?php echo $total_products;?>)</h3>
+            <a href="farmer_dashboard.php?tab=add" style="background:var(--green); color:#fff; padding:8px 14px; border-radius:8px; text-decoration:none; font-weight:800; font-size:0.85rem;">+ Add New</a>
+        </div>
+        <?php if(count($my_products)==0):?>
+            <p style="text-align:center; color:#666; padding:24px;">Wala ka pang product. <a href="farmer_dashboard.php?tab=add" style="color:var(--green); font-weight:800;">Magdagdag ka dito</a></p>
+        <?php else:?>
+            <div class="fd-product-grid">
+            <?php foreach($my_products as $p):
+                $img = $p['image_url'];
+                if(empty($img)) $img = 'https://via.placeholder.com/300?text='.urlencode($p['name']);
+                $imgEsc = htmlspecialchars($img);
+           ?>
+                <div class="fd-prod">
+                    <img src="<?php echo $imgEsc;?>" alt="<?php echo htmlspecialchars($p['name']);?>" onerror="this.src='https://via.placeholder.com/300?text=No+Image'">
+                    <div class="fd-prod-body">
+                        <div style="font-weight:800; font-size:0.95rem;"><?php echo htmlspecialchars($p['name']);?></div>
+                        <div style="color:var(--green); font-weight:900;">₱<?php echo number_format($p['price'],2);?> / <?php echo htmlspecialchars($p['unit']?? 'kg');?></div>
+                        <?php if(isset($p['stock'])):?><div style="font-size:0.75rem; color:#666;">Stock: <?php echo $p['stock'];?> • <?php echo htmlspecialchars($p['category']?? 'Gulay');?></div><?php endif;?>
+                    </div>
+                    <div style="padding:8px; display:flex; gap:6px;">
+                        <a href="farmer_dashboard.php?delete=<?php echo $p['id'];?>" onclick="return confirm('Tanggalin si <?php echo htmlspecialchars($p['name']);?>?')" style="flex:1; text-align:center; color:#c00; font-weight:800; text-decoration:none; padding:6px; border:1px solid #fcc; border-radius:8px; font-size:0.8rem;">Delete</a>
+                    </div>
+                </div>
+            <?php endforeach;?>
+            </div>
+        <?php endif;?>
+    </div>
+    <?php endif;?>
+
+    <?php if($tab=='orders'):?>
+    <div class="fd-card">
+        <h3 style="margin:0 0 12px 0; font-weight:900;">📋 Incoming Orders</h3>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; overflow-x:auto;">
+            <?php foreach($allowed as $k){
+                $label = $k=='all'? 'All' : ucwords(str_replace('_',' ',$k));
+                $active = $filter==$k? 'background:#111; color:#fff;' : 'background:#f5f5f5; color:#333; border:1px solid #eee;';
+                echo "<a href='farmer_dashboard.php?tab=orders&filter=$k' style='padding:8px 14px; border-radius:20px; text-decoration:none; font-weight:800; font-size:0.8rem; $active'>$label</a>";
+            }?>
+        </div>
+        <?php
+        try {
+            $rows=array();
+            if($is_pdo){
+                if($filter=='all'){
+                    $s=$conn->prepare("SELECT o.id, o.customer_name, o.phone, o.address, o.payment_method, o.status, o.tracking_number, o.created_at, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? ORDER BY o.id DESC LIMIT 50");
+                    $s->execute(array($user_id));
+                } else {
+                    $s=$conn->prepare("SELECT o.id, o.customer_name, o.phone, o.address, o.payment_method, o.status, o.tracking_number, o.created_at, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? AND o.status=? ORDER BY o.id DESC LIMIT 50");
+                    $s->execute(array($user_id,$filter));
+                }
+                $rows=$s->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                if($filter=='all'){
+                    $s=$conn->prepare("SELECT o.id, o.customer_name, o.phone, o.address, o.payment_method, o.status, o.tracking_number, o.created_at, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? ORDER BY o.id DESC LIMIT 50");
+                    $s->bind_param("i",$user_id);
+                } else {
+                    $s=$conn->prepare("SELECT o.id, o.customer_name, o.phone, o.address, o.payment_method, o.status, o.tracking_number, o.created_at, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.farmer_id=? AND o.status=? ORDER BY o.id DESC LIMIT 50");
+                    $s->bind_param("is",$user_id,$filter);
+                }
+                $s->execute(); $res=$s->get_result();
+                if($res) while($r=$res->fetch_assoc()) $rows[]=$r;
+                $s->close();
+            }
+            if(count($rows)==0){
+                echo '<p style="color:#666; text-align:center; padding:20px;">Walang order sa '.$filter.' tab.</p>';
+            } else {
+                foreach($rows as $r){
+                    $status=$r['status'];
+                    $badge=$status=='pending'?'#ff9800':($status=='to_ship'?'#2196f3':($status=='shipped'?'#9c27b0':($status=='completed'?'#00b050':'#999')));
+                    echo '<div class="fd-order"><div><b>Order #'.$r['id'].' - '.htmlspecialchars($r['product_name']).' x '.$r['quantity'].'</b> <span class="fd-badge" style="background:'.$badge.'">'.$status.'</span>';
+                    if(!empty($r['tracking_number'])) echo '<span class="fd-badge" style="background:#111; margin-left:4px;">'.$r['tracking_number'].'</span>';
+                    echo '<br><span style="font-size:0.85rem; color:#333;">'.htmlspecialchars($r['customer_name']).' - '.htmlspecialchars($r['phone']).'<br>'.htmlspecialchars(substr($r['address']?? '',0,60)).'</span></div><div style="min-width:140px;"><b>P'.number_format($r['price']*$r['quantity'],2).'</b><br>';
+                    if($status=='pending') echo '<a href="farmer_dashboard.php?action=confirm&id='.$r['id'].'" style="background:#2a9d8f; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Confirm Order</a>';
+                    elseif($status=='to_ship') echo '<a href="farmer_dashboard.php?action=ship&id='.$r['id'].'" style="background:#111; color:#fff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; display:block; text-align:center; margin-top:6px;">Ship Now</a>';
+                    elseif($status=='shipped') echo '<a href="farmer_dashboard.php?action=complete&id='.$r['id'].'" style="background:#00b050; color:#fff; padding:8px 12px; border-radius:8px; text-decoration:none; display:block; text-align:center; margin-top:6px;">Mark Delivered</a>';
+                    echo '</div></div>';
+                }
+            }
+        } catch(Exception $e){ echo '<p style="color:#666; text-align:center;">No orders found: '.htmlspecialchars($e->getMessage()).'</p>'; }
+       ?>
+    </div>
+    <?php endif;?>
 </div>
-<?php include 'footer.php'; ?>
+<?php include 'footer.php';?>
