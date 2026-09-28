@@ -70,9 +70,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     elseif (in_array($role, ['farmer','seller'])) header("Location: farmer_dashboard.php");
                     else header("Location: buyer_dashboard.php");
                     exit();
-                } else {
-                    $error_message = "Mali email o password.";
-                }
+                } else { $error_message = "Mali email o password."; }
             } else {
                 $stmt = $conn->prepare("SELECT id, username, password, email, is_admin, role FROM users WHERE email = ? LIMIT 1");
                 $stmt->bind_param("s", $email);
@@ -108,10 +106,14 @@ include 'header.php';
 .form-box{background:rgba(255,255,255,0.96);backdrop-filter:blur(16px);border:1px solid rgba(0,0,0,0.06);max-width:440px;width:100%;border-radius:20px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.06);margin-top:20px}
 .badge{display:inline-flex;align-items:center;gap:6px;background:#111;color:#fff;padding:6px 12px;border-radius:100px;font-size:0.7rem;font-weight:900;letter-spacing:0.5px;text-transform:uppercase}
 .input-group{position:relative;margin-bottom:18px}
-.input-group label{font-size:0.85rem;font-weight:800;color:#1a2e35;margin-bottom:6px;display:flex;align-items:center;gap:6px}
-.input-group input{width:100%;padding:14px 14px 14px 14px;font-size:1rem;border:1.8px solid #d1d5db;border-radius:12px;outline:none;transition:all 0.2s;background:#fff;box-sizing:border-box}
+.input-group label{font-size:0.85rem;font-weight:800;color:#1a2e35;margin-bottom:6px;display:block}
+.input-group input{width:100%;padding:14px;font-size:1rem;border:1.8px solid #d1d5db;border-radius:12px;outline:none;background:#fff;box-sizing:border-box}
 .input-group input:focus{border-color:#2a9d8f;box-shadow:0 0 0 4px rgba(42,157,143,0.15)}
 .submit-btn{width:100%;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;font-weight:900;font-size:1.05rem;cursor:pointer}
+.social-divider{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:0.75rem;font-weight:800;color:#9ca3af;letter-spacing:1px;justify-content:center}
+.social-divider::before,.social-divider::after{content:"";flex:1;height:1px;background:#e5e7eb}
+.social-btn{width:100%;padding:13px;border-radius:12px;border:1.5px solid #e5e7eb;background:#fff;font-weight:800;font-size:0.92rem;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;color:#111;margin-bottom:10px}
+.social-btn.facebook{background:#1877f2;color:#fff;border-color:#1877f2}
 </style>
 <div class="login-page">
     <div class="form-box">
@@ -136,6 +138,15 @@ include 'header.php';
             </div>
             <button type="submit" class="submit-btn">Login</button>
         </form>
+
+        <div class="social-divider">OR</div>
+        <a href="auth/google.php" class="social-btn">
+            <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width:18px;height:18px;"> Continue with Google
+        </a>
+        <a href="auth/facebook.php" class="social-btn facebook">
+            <i class="fab fa-facebook" style="font-size:18px;"></i> Continue with Facebook
+        </a>
+
         <p style="margin:20px 0 0 0; font-size:0.9rem; text-align:center; color:#6b7280;">
             Wala ka pa account? <a href="register.php" style="font-weight:900; color:#2a9d8f; text-decoration:none;">Gumawa ng bago</a>
         </p>
