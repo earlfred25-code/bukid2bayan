@@ -2,9 +2,35 @@
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 include 'db_connect.php';
+
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
+    $uid_cookie = $_COOKIE['user_id'];
+    try{
+        $is_tmp = $conn instanceof PDO;
+        if($is_tmp){
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
+            $st->execute([$uid_cookie]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
+            $st->bind_param("i", $uid_cookie);
+            $st->execute();
+            $u = $st->get_result()->fetch_assoc();
+        }
+        if($u){
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['user_name'] = $u['username'];
+            $_SESSION['role'] = $u['role']?? 'buyer';
+            $_SESSION['is_admin'] = $u['is_admin']?? 0;
+        }
+    }catch(Exception $e){}
+}
+
 $order_id = (int)($_GET['id']?? 0);
-$user_id = (int)($_SESSION['user_id']?? $_SESSION['user']['id']?? 0);
+$user_id = (int)($_SESSION['user_id']?? $_COOKIE['user_id']?? 0);
+$is_admin = (int)($_SESSION['is_admin']?? $_COOKIE['is_admin']?? 0);
 $is_pdo = $conn instanceof PDO;
+
 if (!function_exists('addTracking')) {
     function addTracking($conn, $oid, $status, $loc, $desc){
         try {
@@ -21,6 +47,7 @@ if (!function_exists('addTracking')) {
         } catch(Exception $e){}
     }
 }
+
 try {
     if($is_pdo){
         $conn->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(50)");
@@ -29,47 +56,72 @@ try {
         $conn->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS farmer_lng DECIMAL(10,7) DEFAULT 121.0850");
         $conn->exec("CREATE TABLE IF NOT EXISTS tracking_logs (id SERIAL PRIMARY KEY, order_id INT, status VARCHAR(30), location VARCHAR(255), description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     } else {
-        $conn->query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(50)");
-        $conn->query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress'");
-        $conn->query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS farmer_lat DECIMAL(10,7) DEFAULT 14.3320");
-        $conn->query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS farmer_lng DECIMAL(10,7) DEFAULT 121.0850");
+        // MySQL - ignore if exists
+        try{ $conn->query("ALTER TABLE orders ADD COLUMN tracking_number VARCHAR(50)"); }catch(Exception $e){}
+        try{ $conn->query("ALTER TABLE orders ADD COLUMN courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Xpress'"); }catch(Exception $e){}
+        try{ $conn->query("ALTER TABLE orders ADD COLUMN farmer_lat DECIMAL(10,7) DEFAULT 14.3320"); }catch(Exception $e){}
+        try{ $conn->query("ALTER TABLE orders ADD COLUMN farmer_lng DECIMAL(10,7) DEFAULT 121.0850"); }catch(Exception $e){}
         $conn->query("CREATE TABLE IF NOT EXISTS tracking_logs (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, status VARCHAR(30), location VARCHAR(255), description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     }
 } catch(Exception $e){}
+
 $order=null;
 try {
     if($is_pdo){
-        $s=$conn->prepare("SELECT * FROM orders WHERE id=?");
+        $s=$conn->prepare("SELECT * FROM orders WHERE id=? LIMIT 1");
         $s->execute([$order_id]);
         $order=$s->fetch(PDO::FETCH_ASSOC);
     } else {
-        $r=$conn->query("SELECT * FROM orders WHERE id=$order_id");
+        $s=$conn->prepare("SELECT * FROM orders WHERE id=? LIMIT 1");
+        $s->bind_param("i",$order_id);
+        $s->execute();
+        $r=$s->get_result();
         if($r) $order=$r->fetch_assoc();
+        $s->close();
     }
 } catch(Exception $e){}
-if(!$order){ include 'header.php'; echo "<div style='margin:20px auto; text-align:center; max-width:600px; padding:40px 20px;'><h3>Order not found</h3><a href='my_orders.php' style='background:#111; color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; display:inline-block; margin-top:10px;'>Back</a></div>"; include 'footer.php'; exit(); }
+
+include 'header.php';
+
+if(!$order){
+    echo "<div style='margin:20px auto; text-align:center; max-width:600px; padding:40px 20px; background:#fff; border:1px solid #e9e9e9; border-radius:16px;'><h3>Order not found</h3><p style='color:#666;'>Wala kaming makitang order #".htmlspecialchars($order_id)."</p><a href='my_orders.php' style='background:#111; color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; display:inline-block; margin-top:10px;'>Back to Orders</a></div>";
+    include 'footer.php'; exit();
+}
+
+// Ownership check - hindi pwede makita ng ibang user
+if($is_admin!=1 && (int)($order['user_id']??0)!== $user_id){
+    echo "<div style='margin:20px auto; text-align:center; max-width:600px; padding:40px 20px; background:#fff; border:1px solid #e9e9e9; border-radius:16px;'><h3>Access denied</h3><p style='color:#666;'>Hindi sayo tong order na to.</p><a href='my_orders.php' style='background:#111; color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; display:inline-block; margin-top:10px;'>Back</a></div>";
+    include 'footer.php'; exit();
+}
+
 $status=$order['status']??'pending';
 $progress=['pending'=>15,'to_pay'=>15,'to_ship'=>40,'shipped'=>75,'out_for_delivery'=>85,'completed'=>100,'cancelled'=>0];
 $percent=$progress[$status]??15;
-$tracking=$order['tracking_number']??'SPXPH'.rand(1000000000,9999999999);
+$tracking=$order['tracking_number']??'B2B'.str_pad($order_id,8,'0',STR_PAD_LEFT);
+
 try {
     if($is_pdo){
         $s=$conn->prepare("SELECT COUNT(*) FROM tracking_logs WHERE order_id=?");
         $s->execute([$order_id]);
         $hasLogs=(int)$s->fetchColumn();
     } else {
-        $hasLogs=$conn->query("SELECT COUNT(*) as c FROM tracking_logs WHERE order_id=$order_id")->fetch_assoc()['c']??0;
+        $s=$conn->prepare("SELECT COUNT(*) as c FROM tracking_logs WHERE order_id=?");
+        $s->bind_param("i",$order_id);
+        $s->execute();
+        $hasLogs=$s->get_result()->fetch_assoc()['c']??0;
+        $s->close();
     }
     if($hasLogs==0){
         addTracking($conn,$order_id,'pending','Order Placed','Order placed by '.$order['customer_name']);
         if(in_array($status,['to_ship','shipped','completed'])) addTracking($conn,$order_id,'to_ship','Binan Farmer Centre','Seller confirmed order - preparing to ship');
         if(in_array($status,['shipped','completed'])) {
-            addTracking($conn,$order_id,'shipped','Binan Sorting Hub','Parcel departed - tracking '.$tracking.' assigned to '.$order['courier']);
+            addTracking($conn,$order_id,'shipped','Binan Sorting Hub','Parcel departed - tracking '.$tracking.' assigned to '.($order['courier']??'BUKID2BAYAN Xpress'));
             addTracking($conn,$order_id,'shipped','Calamba Hub - In Transit','Parcel inbounded at logistics facility');
         }
         if($status=='completed') addTracking($conn,$order_id,'completed','Buyer Location - '.$order['address'],'Parcel delivered - received by '.$order['customer_name']);
     }
 } catch(Exception $e){}
+
 $logs=[];
 try {
     if($is_pdo){
@@ -77,11 +129,14 @@ try {
         $s->execute([$order_id]);
         $logs=$s->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $r=$conn->query("SELECT * FROM tracking_logs WHERE order_id=$order_id ORDER BY created_at ASC");
+        $s=$conn->prepare("SELECT * FROM tracking_logs WHERE order_id=? ORDER BY created_at ASC");
+        $s->bind_param("i",$order_id);
+        $s->execute();
+        $r=$s->get_result();
         if($r){ while($l=$r->fetch_assoc()) $logs[]=$l; }
+        $s->close();
     }
 } catch(Exception $e){}
-include 'header.php';
 ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -102,7 +157,7 @@ include 'header.php';
         <div style="display:flex; justify-content:space-between; font-size:0.7rem; font-weight:700; margin-top:6px; color:#666;"><span>Ordered</span><span>To Ship</span><span>Shipped</span><span>Delivered</span></div>
     </div>
     <div id="map" style="height:480px; border-radius:14px; border:1px solid #e9e9e9;"></div>
-    <p style="font-size:0.75rem; color:#888; margin-top:6px;">Live tracking - Powered by OSM + Google Maps style</p>
+    <p style="font-size:0.75rem; color:#888; margin-top:6px;">Live tracking - Powered by OSM</p>
   </div>
   <div style="background:#fff; border:1px solid #e9e9e9; border-radius:14px; padding:16px; height:fit-content;">
     <h3 style="font-weight:900; margin:0 0 12px 0;">Shipment History</h3>
@@ -111,7 +166,7 @@ include 'header.php';
         <div style="margin-bottom:16px; position:relative;">
             <div style="width:10px; height:10px; background:<?= $log['status']=='completed'?'#00b050':($log['status']=='shipped'?'#9c27b0':'#111')?>; border-radius:50%; position:absolute; left:-18px; top:4px;"></div>
             <b style="text-transform:capitalize; font-size:0.9rem;"><?= htmlspecialchars($log['status'])?></b> - <span style="font-size:0.8rem; font-weight:700;"><?= htmlspecialchars($log['location'])?></span><br>
-            <span style="font-size:0.8rem; color:#666;"><?= $log['created_at']?></span><br>
+            <span style="font-size:0.8rem; color:#666;"><?= htmlspecialchars($log['created_at']??'')?></span><br>
             <span style="font-size:0.85rem; color:#333;"><?= htmlspecialchars($log['description'])?></span>
         </div>
         <?php endforeach;?>
@@ -130,7 +185,7 @@ fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURICompo
 .then(r=>r.json()).then(data=>{
   if(data[0]){
     let cust = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-    L.marker(cust).addTo(map).bindPopup("Buyer: <?= addslashes($order['customer_name']??'')?> - <?= addslashes($order['address']??'')?>");
+    L.marker(cust).addTo(map).bindPopup("Buyer: <?= addslashes($order['customer_name']??'')?>");
     L.polyline([farmer, cust], {color:'#111', dashArray:'8,8', weight:3}).addTo(map);
     map.fitBounds([farmer, cust], {padding:[40,40]});
     <?php if($status=='shipped' || $status=='to_ship'):?>
@@ -143,10 +198,6 @@ fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURICompo
         truck.setLatLng([lat,lng]);
     }, 70);
     <?php endif;?>
-  } else {
-    let cust = [14.3400, 121.0800];
-    L.marker(cust).addTo(map).bindPopup("Buyer approx");
-    L.polyline([farmer, cust], {color:'#111', dashArray:'8,8', weight:3}).addTo(map);
   }
 });
 </script>
