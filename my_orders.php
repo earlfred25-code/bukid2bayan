@@ -61,8 +61,7 @@ include 'header.php';
 </style>
 <div class="orders-wrap">
   <div style="background:#fff; border:1px solid #e9e9e9; border-radius:16px; padding:22px; margin-bottom:12px;">
-    <h1 style="font-size:clamp(1.4rem,4vw,1.8rem); font-weight:900; margin:0;">My Orders - Tracking</h1>
-    <p style="color:#666; font-size:0.9rem; margin:6px 0 0 0;">Track mo dito parang Shopee / Lazada + Google Maps</p>
+    <h1 style="font-size:clamp(1.4rem,4vw,1.8rem); font-weight:900; margin:0;">My Orders</h1>
   </div>
   <div style="background:#fff; border:1px solid #e9e9e9; border-radius:12px; padding:10px 12px; margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; overflow-x:auto;">
     <?php $tabs=['all'=>'All','pending'=>'To Pay','to_ship'=>'To Ship','shipped'=>'Shipped','completed'=>'Completed']; foreach($tabs as $k=>$l){ $a=$filter==$k?'background:#111;color:#fff;':'background:#f5f5f5;color:#333;border:1px solid #eee;'; echo "<a href='my_orders.php?filter=$k' style='padding:7px 12px; border-radius:20px; text-decoration:none; font-weight:800; font-size:0.8rem; white-space:nowrap; $a'>$l</a>"; }?>
