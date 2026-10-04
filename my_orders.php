@@ -1,18 +1,30 @@
 <?php
+ob_start();
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
-if (session_status() == PHP_SESSION_NONE) { session_start(); }
+if (session_status() == PHP_SESSION_NONE) {
+    @ini_set('session.save_path', sys_get_temp_dir());
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!== 'off') || ($_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $secure = $is_https;
+    if (PHP_VERSION_ID >= 70300) {
+        @session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+    }
+    session_start();
+}
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!== 'off') || ($_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$secure = $is_https;
+
 include 'db_connect.php';
 
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
-    $uid_cookie = $_COOKIE['user_id'];
+    $uid_cookie = (int)$_COOKIE['user_id'];
     try{
         $is_tmp = $conn instanceof PDO;
         if($is_tmp){
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
             $st->execute([$uid_cookie]);
             $u = $st->fetch(PDO::FETCH_ASSOC);
         } else {
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id = ? LIMIT 1");
+            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
             $st->bind_param("i", $uid_cookie);
             $st->execute();
             $u = $st->get_result()->fetch_assoc();
@@ -22,15 +34,18 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
             $_SESSION['user_name'] = $u['username'];
             $_SESSION['role'] = $u['role']?? 'buyer';
             $_SESSION['is_admin'] = $u['is_admin']?? 0;
+            // refresh cookie para hindi mawala sa next filter click
+            @setcookie('user_id', (int)$u['id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+            @setcookie('user_name', $u['username'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>false,'samesite'=>'Lax']);
         }
     }catch(Exception $e){}
 }
 
-if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']) && !isset($_COOKIE['user_id'])) { 
-    header('Location: login.php'); exit(); 
+if (!isset($_SESSION['user_id']) &&!isset($_SESSION['user']) &&!isset($_COOKIE['user_id'])) {
+    header('Location: login.php'); exit();
 }
 
-$user_id = (int)($_SESSION['user_id'] ?? $_COOKIE['user_id'] ?? 0);
+$user_id = (int)($_SESSION['user_id']?? $_COOKIE['user_id']?? 0);
 $is_pdo = $conn instanceof PDO;
 
 try {
@@ -40,14 +55,14 @@ try {
         $conn->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS farmer_lat DECIMAL(10,7) DEFAULT 14.3320");
         $conn->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS farmer_lng DECIMAL(10,7) DEFAULT 121.0850");
     } else {
-        $conn->query("ALTER TABLE orders ADD COLUMN tracking_number VARCHAR(50)");
-        $conn->query("ALTER TABLE orders ADD COLUMN courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Express'");
-        $conn->query("ALTER TABLE orders ADD COLUMN farmer_lat DECIMAL(10,7) DEFAULT 14.3320");
-        $conn->query("ALTER TABLE orders ADD COLUMN farmer_lng DECIMAL(10,7) DEFAULT 121.0850");
+        @$conn->query("ALTER TABLE orders ADD COLUMN tracking_number VARCHAR(50)");
+        @$conn->query("ALTER TABLE orders ADD COLUMN courier VARCHAR(50) DEFAULT 'BUKID2BAYAN Express'");
+        @$conn->query("ALTER TABLE orders ADD COLUMN farmer_lat DECIMAL(10,7) DEFAULT 14.3320");
+        @$conn->query("ALTER TABLE orders ADD COLUMN farmer_lng DECIMAL(10,7) DEFAULT 121.0850");
     }
 } catch(Exception $e){}
 
-$allowed = ['all','pending','to_ship','shipped','completed'];
+$allowed = ['all','pending','to_ship','shipped','completed','cancelled'];
 $filter = $_GET['filter']?? 'all';
 if(!in_array($filter,$allowed)) $filter='all';
 
@@ -64,7 +79,7 @@ include 'header.php';
     <h1 style="font-size:clamp(1.4rem,4vw,1.8rem); font-weight:900; margin:0;">My Orders</h1>
   </div>
   <div style="background:#fff; border:1px solid #e9e9e9; border-radius:12px; padding:10px 12px; margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; overflow-x:auto;">
-    <?php $tabs=['all'=>'All','pending'=>'To Pay','to_ship'=>'To Ship','shipped'=>'Shipped','completed'=>'Completed']; foreach($tabs as $k=>$l){ $a=$filter==$k?'background:#111;color:#fff;':'background:#f5f5f5;color:#333;border:1px solid #eee;'; echo "<a href='my_orders.php?filter=$k' style='padding:7px 12px; border-radius:20px; text-decoration:none; font-weight:800; font-size:0.8rem; white-space:nowrap; $a'>$l</a>"; }?>
+    <?php $tabs=['all'=>'All','pending'=>'To Pay','to_ship'=>'To Ship','shipped'=>'Shipped','completed'=>'Completed','cancelled'=>'Cancelled']; foreach($tabs as $k=>$l){ $a=$filter==$k?'background:#111;color:#fff;':'background:#f5f5f5;color:#333;border:1px solid #eee;'; echo "<a href='my_orders.php?filter=$k' style='padding:7px 12px; border-radius:20px; text-decoration:none; font-weight:800; font-size:0.8rem; white-space:nowrap; $a'>$l</a>"; }?>
   </div>
   <?php
   try {
@@ -104,8 +119,8 @@ include 'header.php';
           foreach($orders as $order){
               $oid=(int)$order['id']; $status=$order['status']??'pending';
               $color=$status=='pending'?'#ff9800':($status=='to_ship'?'#2196f3':($status=='shipped'?'#9c27b0':($status=='completed'?'#00b050':'#999')));
-              $percent=['pending'=>20,'to_ship'=>45,'shipped'=>80,'completed'=>100][$status]??20;
- ?>
+              $percent=['pending'=>20,'to_ship'=>45,'shipped'=>80,'completed'=>100,'cancelled'=>0][$status]??20;
+?>
   <div style="background:#fff; border:1px solid #e9e9e9; border-radius:16px; padding:18px; margin-bottom:16px;">
     <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
       <div><b>Order #<?= $oid?></b> <span style="background:<?= $color?>; color:#fff; padding:3px 10px; border-radius:20px; font-size:0.7rem; font-weight:800; text-transform:uppercase;"><?= htmlspecialchars($status)?></span>
@@ -134,7 +149,7 @@ include 'header.php';
           }
           foreach($items as $it){ echo '<div style="display:flex; justify-content:space-between; font-size:0.9rem; margin-bottom:4px;"><span>'.htmlspecialchars($it['product_name']).' x '.(int)$it['quantity'].'</span><span>₱'.number_format($it['price']*$it['quantity'],2).'</span></div>'; }
       } catch(Exception $e){}
-     ?>
+    ?>
     </div>
     <?php if(in_array($status,['to_ship','shipped','completed'])):?>
     <div id="map-<?= $oid?>" style="height:240px; border-radius:12px; border:1px solid #e9e9e9; margin-top:12px;"></div>
@@ -150,12 +165,12 @@ include 'header.php';
       L.marker(farmer).addTo(map).bindPopup("Farmer Location");
       let addr="<?= addslashes($order['address']??'')?>";
       fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`)
-    .then(r=>r.json()).then(d=>{
+   .then(r=>r.json()).then(d=>{
         if(d[0]){
           let cust=[parseFloat(d[0].lat), parseFloat(d[0].lon)];
           L.marker(cust).addTo(map).bindPopup("Delivery: <?= addslashes($order['address']??'')?>");
-          L.polyline([farmer,cust],{color:'#111',dashArray:'8,8',weight:3}).addTo(map);
-          map.fitBounds([farmer,cust],{padding:[20,20]});
+          L.polyline([farmer][cust],{color:'#111',dashArray:'8,8',weight:3}).addTo(map);
+          map.fitBounds([farmer][cust],{padding:[20][20]});
           <?php if($status=='shipped'):?>
           let truck=L.marker(farmer,{icon:L.divIcon({html:'🚚',className:'',iconSize:[28,28]})}).addTo(map);
           let t=0; setInterval(()=>{ t+=0.008; if(t>1) t=0; truck.setLatLng([farmer[0]+(cust[0]-farmer[0])*t, farmer[1]+(cust[1]-farmer[1])*t]); }, 60);
