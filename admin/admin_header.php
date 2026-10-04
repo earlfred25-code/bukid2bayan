@@ -1,20 +1,24 @@
 <?php
+ob_start();
 if (session_status() == PHP_SESSION_NONE) {
     @ini_set('session.save_path', sys_get_temp_dir());
-    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
     $secure = $is_https;
     if (PHP_VERSION_ID >= 70300) {
         @session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
     }
     session_start();
 }
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$secure = $is_https;
+
 // VERCEL FIX - RESTORE FROM COOKIE
 if (isset($_COOKIE['user_id']) && $_COOKIE['user_id'] !== '') {
     if (!isset($_SESSION['user_id'])) $_SESSION['user_id'] = (int)$_COOKIE['user_id'];
     if (!isset($_SESSION['user_name']) && isset($_COOKIE['user_name'])) $_SESSION['user_name'] = $_COOKIE['user_name'];
     if (!isset($_SESSION['is_admin']) && isset($_COOKIE['is_admin'])) $_SESSION['is_admin'] = (int)$_COOKIE['is_admin'];
     if (!isset($_SESSION['role']) && isset($_COOKIE['role'])) $_SESSION['role'] = $_COOKIE['role'];
-    setcookie('user_id', (int)$_COOKIE['user_id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+    @setcookie('user_id', (int)$_COOKIE['user_id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
 }
 
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_admin']) || $_SESSION['is_admin'] != 1) {
