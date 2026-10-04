@@ -1,9 +1,27 @@
 <?php
-if (session_status() == PHP_SESSION_NONE) { session_start(); }
+if (session_status() == PHP_SESSION_NONE) {
+    @ini_set('session.save_path', sys_get_temp_dir());
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['SERVER_PORT'] == 443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $secure = $is_https;
+    if (PHP_VERSION_ID >= 70300) {
+        @session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+    }
+    session_start();
+}
+// VERCEL FIX - RESTORE FROM COOKIE
+if (isset($_COOKIE['user_id']) && $_COOKIE['user_id'] !== '') {
+    if (!isset($_SESSION['user_id'])) $_SESSION['user_id'] = (int)$_COOKIE['user_id'];
+    if (!isset($_SESSION['user_name']) && isset($_COOKIE['user_name'])) $_SESSION['user_name'] = $_COOKIE['user_name'];
+    if (!isset($_SESSION['is_admin']) && isset($_COOKIE['is_admin'])) $_SESSION['is_admin'] = (int)$_COOKIE['is_admin'];
+    if (!isset($_SESSION['role']) && isset($_COOKIE['role'])) $_SESSION['role'] = $_COOKIE['role'];
+    setcookie('user_id', (int)$_COOKIE['user_id'], ['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+}
+
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_admin']) || $_SESSION['is_admin'] != 1) {
     header("Location: ../login.php"); exit();
 }
 include_once '../db_connect.php';
+$is_pdo = $conn instanceof PDO;
 $page_title = $page_title ?? 'Dashboard - Bukid2Bayan';
 $current = basename($_SERVER['PHP_SELF']);
 ?>
@@ -30,6 +48,11 @@ $current = basename($_SERVER['PHP_SELF']);
         .search{flex:1;max-width:400px;background:#f5f5f5;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:8px;}
         .search input{border:none;background:transparent;outline:none;width:100%;font-size:0.9rem;}
         .content{padding:24px 20px;max-width:1200px;margin:0 auto;}
+        .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 4px 12px rgba(0,0,0,0.06);border:1px solid #eee;margin-bottom:16px}
+        .table-wrap{overflow:auto} table{width:100%;border-collapse:collapse;font-size:0.9rem} th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left} th{background:#f9fafb;font-weight:800}
+        .badge{padding:4px 10px;border-radius:20px;font-size:0.7rem;font-weight:800;color:#fff}
+        .btn{padding:6px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;text-decoration:none;font-weight:700;font-size:0.8rem;display:inline-block}
+        .btn.danger{color:#dc2626;border-color:#fecaca}.btn.primary{background:#111;color:#fff}
         @media(max-width:900px){.sidebar{width:100%;position:relative;}.main{margin-left:0;}.topbar{flex-wrap:wrap;}}
     </style>
 </head>
@@ -41,9 +64,9 @@ $current = basename($_SERVER['PHP_SELF']);
         <nav class="nav">
             <a href="index.php" class="<?php echo $current=='index.php'?'active':''; ?>"><i class="fas fa-house"></i> Dashboard</a>
             <a href="manage_products.php" class="<?php echo $current=='manage_products.php'?'active':''; ?>"><i class="fas fa-box"></i> Products</a>
-            <a href="#" style="opacity:0.5;"><i class="fas fa-users"></i> Users</a>
-            <a href="#" style="opacity:0.5;"><i class="fas fa-basket-shopping"></i> Orders</a>
-            <a href="#" style="opacity:0.5;"><i class="fas fa-gear"></i> Settings</a>
+            <a href="users.php" class="<?php echo $current=='users.php'?'active':''; ?>"><i class="fas fa-users"></i> Users</a>
+            <a href="orders.php" class="<?php echo $current=='orders.php'?'active':''; ?>"><i class="fas fa-basket-shopping"></i> Orders</a>
+            <a href="settings.php" class="<?php echo $current=='settings.php'?'active':''; ?>"><i class="fas fa-gear"></i> Settings</a>
         </nav>
         <div class="sidebar-bottom">
             <a href="../index.php" target="_blank" style="color:#aaa;text-decoration:none;font-weight:700;font-size:0.85rem;display:flex;align-items:center;gap:8px;padding:8px;"><i class="fas fa-store"></i> View Shop</a>
