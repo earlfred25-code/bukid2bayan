@@ -1,86 +1,77 @@
 <?php
-ob_start();
-error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
+if (ob_get_level() == 0) ob_start();
 if (session_status() == PHP_SESSION_NONE) {
     @ini_set('session.save_path', sys_get_temp_dir());
-    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!== 'off') || ($_SERVER['SERVER_PORT']==443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO']==='https');
+    $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['SERVER_PORT']==443) || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO']==='https');
     $secure=$is_https;
     if (PHP_VERSION_ID >= 70300) @session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
     session_start();
 }
-include 'db_connect.php';
-function find_image($want){
-    $dir=__DIR__.'/images';
-    if(!is_dir($dir)) return '/images/'.basename($want);
-    $files=scandir($dir); $wl=strtolower(basename($want));
-    foreach($files as $f){ if(strtolower($f)===$wl) return '/images/'.$f; }
-    $wn=pathinfo($wl,PATHINFO_FILENAME);
-    foreach($files as $f){ if(strpos(strtolower($f),$wn)!==false) return '/images/'.$f; }
-    return '/images/'.basename($want);
-}
-include 'header.php';
-$is_pdo=$conn instanceof PDO;
-?>
-<style>
-.hero{max-width:1280px;margin:0 auto;padding:48px 20px 30px;display:grid;grid-template-columns:1.1fr .9fr;gap:32px;align-items:center;position:relative;overflow:hidden;background:radial-gradient(600px 300px at 10% 0%,#d8e9c8 0%,transparent 60%),radial-gradient(500px 300px at 90% 20%,#f7e6b5 0%,transparent 60%),linear-gradient(180deg,#f6f3e6 0%,#fdfaf0 100%)}
-.badge{display:inline-flex;gap:6px;background:#fff;border:1.5px solid #c8e6c9;color:#2d7a3e;font-weight:800;font-size:.75rem;padding:6px 12px;border-radius:20px}
-.hero h1{font-size:clamp(2.2rem,5vw,3.4rem);font-weight:900;line-height:.95;letter-spacing:-1.2px;margin:14px 0 12px;color:#1f2a1f}
-.hero h1 em{font-style:normal;color:#2d7a3e}
-.hero p{color:#5a5540;font-size:1.02rem;line-height:1.6;max-width:520px}
-.btns{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
-.btn{padding:13px 22px;border-radius:30px;font-weight:800;text-decoration:none;transition:.2s}
-.btn1{background:#1f2a1f;color:#fff}.btn1:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.15)}
-.btn2{background:#fff;border:1.5px solid #d8d0a8;color:#1f2a1f}
-.quick{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
-.quick a{background:#fff;border:1px solid #e6dfb8;padding:6px 12px;border-radius:20px;text-decoration:none;color:#5a4e2a;font-weight:700;font-size:.8rem}
-.quick a:hover{background:#2d7a3e;color:#fff;border-color:#2d7a3e}
-.visual{background:#ffffff;border:1.5px solid #e6dfb8;border-radius:24px;padding:18px;box-shadow:0 20px 50px rgba(60,40,0,.08);position:relative}
-.stat{display:flex;gap:12px;align-items:center;background:#fdfaf0;border:1px solid #ece6d1;border-radius:16px;padding:12px;margin-bottom:12px}
-.stat.green{background:#e8f5d8;border-color:#c8e6c9}
-.stat.yellow{background:#fff8d6;border-color:#f0e0a0}
-.stat.dark{background:#2d7a3e;color:#fff;border-color:#2d7a3e}
-@media(max-width:900px){.hero{grid-template-columns:1fr;padding:24px 16px}}
-.suki{max-width:1280px;margin:0 auto;padding:28px 20px}
-.suki-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-@media(min-width:768px){.suki-grid{grid-template-columns:repeat(3,1fr)}}@media(min-width:1100px){.suki-grid{grid-template-columns:repeat(6,1fr)}}
-.card{background:#ffffff;border:1.5px solid #e6dfb8;border-radius:18px;padding:12px;text-align:center;transition:.25s}
-.card:hover{transform:translateY(-4px);box-shadow:0 12px 24px rgba(0,0,0,.07);border-color:#a8c98a}
-.card img{width:100%;height:130px;object-fit:contain;background:#fdfaf0;border-radius:12px}
-</style>
-
-<section class="hero">
-  <div>
-    <div class="badge">🌱 Direktang galing Biñan farmers</div>
-    <h1>Fresh from the farm, <em>straight to your door.</em></h1>
-    <p>Gulay at prutas lang — walang meat, walang isda. Sariwa araw-araw, diretso galing sa local farmers ng Laguna papunta sa hapag mo.</p>
-    <div class="btns"><a href="products.php" class="btn btn1">Mamili Na →</a><a href="my_orders.php" class="btn btn2">My Orders</a></div>
-    <div class="quick"><a href="products.php?cat=fruits">🍎 Fruits</a><a href="products.php?cat=vegetables">🥬 Veggies</a><a href="products.php?cat=essentials">🧺 Essentials</a><a href="products.php">🔥 Best Sellers</a></div>
-  </div>
-  <div class="visual">
-    <div style="font-weight:900;color:#1f2a1f">Ano meron ngayon?</div>
-    <div style="font-size:.85rem;color:#6b6450;margin-bottom:14px">Bagong pitas ngayong umaga • May kulay na background</div>
-    <div class="stat green"><div style="width:38px;height:38px;background:#fff;display:grid;place-items:center;border-radius:10px">🥬</div><div><b>50+ klase ng gulay</b><div style="font-size:.75rem;color:#5a6b4a">Diretso sa bukid, hindi palengke</div></div></div>
-    <div class="stat yellow"><div style="width:38px;height:38px;background:#fff;display:grid;place-items:center;border-radius:10px">🍎</div><div><b>Matamis na prutas</b><div style="font-size:.75rem;color:#7a6b3a">Hinog sa puno, hindi sa pilit</div></div></div>
-    <div class="stat dark"><div style="width:38px;height:38px;background:rgba(255,255,255,.2);display:grid;place-items:center;border-radius:10px">🚚</div><div><b style="color:#fff">Bukid2Bayan Express</b><div style="font-size:.75rem;color:#c8e6c9">On the way • Biñan Laguna • 30-60 mins</div></div></div>
-  </div>
-</section>
-
-<div class="suki">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0;font-weight:900;color:#1f2a1f;letter-spacing:-.5px">SUKI PICKS FOR 2026</h2>
-    <a href="products.php" style="background:#fff;border:1.5px solid #e6dfb8;padding:6px 14px;border-radius:20px;text-decoration:none;color:#1f2a1f;font-weight:800;font-size:.8rem">See All →</a>
-  </div>
-  <div class="suki-grid">
-  <?php
-    try {
-        $sql="SELECT id,name,image_url FROM products WHERE LOWER(name) NOT LIKE '%fish%' AND LOWER(name) NOT LIKE '%meat%' AND LOWER(name) NOT LIKE '%pork%' AND LOWER(name) NOT LIKE '%beef%' AND LOWER(name) NOT LIKE '%chicken%' ORDER BY id DESC LIMIT 6";
-        $products=[]; if($is_pdo){$stmt=$conn->query($sql);$products=$stmt->fetchAll(PDO::FETCH_ASSOC);} else {$res=$conn->query($sql); if($res) while($r=$res->fetch_assoc()) $products[]=$r;}
-        foreach($products as $row){
-            $img=htmlspecialchars(find_image(trim($row['image_url']??'').''!==''?$row['image_url']:$row['name'].'.jpg'),ENT_QUOTES,'UTF-8');
-            echo '<div class="card"><a href="products.php"><img src="'.$img.'" loading="lazy" onerror="this.src=\'https://via.placeholder.com/120?text=Gulay\'"></a><p style="font-weight:800;margin:10px 0 0;font-size:.85rem;color:#1f2a1f">'.htmlspecialchars($row['name']).'</p><a href="products.php" style="display:inline-block;margin-top:8px;font-size:.72rem;font-weight:800;color:#fff;background:#1f2a1f;padding:6px 14px;border-radius:20px;text-decoration:none">View</a></div>';
+if(isset($_COOKIE['user_id']) && $_COOKIE['user_id']!=''){
+    if(!isset($_SESSION['user_id'])) $_SESSION['user_id']=(int)$_COOKIE['user_id'];
+    if(!isset($_SESSION['user_name']) && isset($_COOKIE['user_name'])) $_SESSION['user_name']=$_COOKIE['user_name'];
+    if(!isset($_SESSION['role']) && isset($_COOKIE['role'])) $_SESSION['role']=$_COOKIE['role'];
+    @setcookie('user_id',(int)$_COOKIE['user_id'],['expires'=>time()+86400*30,'path'=>'/','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
+    if (file_exists(__DIR__.'/db_connect.php')) {
+        include_once __DIR__.'/db_connect.php';
+        if(isset($conn)){
+            $uid=(int)$_COOKIE['user_id'];
+            try{
+                if($conn instanceof PDO){ $st=$conn->prepare("SELECT id,username,role,is_admin FROM users WHERE id=? LIMIT 1"); $st->execute([$uid]); $u=$st->fetch(PDO::FETCH_ASSOC); }
+                else { $st=$conn->prepare("SELECT id,username,role,is_admin FROM users WHERE id=? LIMIT 1"); $st->bind_param("i",$uid); $st->execute(); $u=$st->get_result()->fetch_assoc(); $st->close(); }
+                if($u){ $_SESSION['user_id']=$u['id']; $_SESSION['user_name']=$u['username']; $_SESSION['role']=$u['role']??'buyer'; $_SESSION['is_admin']=$u['is_admin']??0; }
+            }catch(Exception $e){}
         }
-    } catch(Exception $e){ echo '<p style="color:red">'.htmlspecialchars($e->getMessage()).'</p>'; }
-  ?>
+    }
+}
+$current_page=strtolower(basename($_SERVER['PHP_SELF']??''));
+$hide_categories=in_array($current_page,['login.php','register.php']);
+$cart_count=0; if(isset($_SESSION['cart'])&&is_array($_SESSION['cart'])) foreach($_SESSION['cart'] as $v) $cart_count+=is_array($v)&&isset($v['quantity'])?(int)$v['quantity']:(is_numeric($v)?(int)$v:1);
+$is_logged=isset($_SESSION['user_id'])||isset($_COOKIE['user_id']);
+$role=$_SESSION['role']??$_COOKIE['role']??'buyer';
+$is_farmer=in_array(strtolower($role),['farmer','seller','admin']);
+?>
+<!DOCTYPE html><html lang="tl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BUKID2BAYAN</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+body{margin:0;padding-top:84px;font-family:'Inter',Arial,sans-serif;background:#fdf8ec}
+.top{background:#1f2a1f;color:#e8f0d8;padding:6px 20px;font-size:.78rem;display:flex;justify-content:space-between;max-width:100%}
+.top a{color:#e8f0d8;text-decoration:none;font-weight:600;margin-left:14px}
+.hdr{position:fixed;top:26px;left:0;right:0;z-index:999;background:#fffcf2;border-bottom:1px solid #e6dfb8}
+.hdr-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;gap:16px}
+.logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+.logo-box{background:#2d7a3e;color:#fff;font-weight:900;padding:8px 12px;border-radius:10px;line-height:.9;font-size:.9rem}
+.logo-text{font-weight:800;color:#1f2a1f;font-size:.85rem;letter-spacing:-.3px}
+.nav{display:flex;gap:2px;background:#f5efe0;padding:4px;border-radius:30px;border:1px solid #e6dfb8}
+.nav a{padding:7px 14px;border-radius:20px;text-decoration:none;color:#3a3a2a;font-weight:700;font-size:.84rem;transition:.2s}
+.nav a:hover,.nav a.on{background:#1f2a1f;color:#fff}
+.right{display:flex;align-items:center;gap:8px}
+.search{position:relative}
+.search input{width:240px;padding:8px 12px 8px 34px;border-radius:20px;border:1px solid #e6dfb8;background:#fdfaf0;outline:none;font-weight:600;font-size:.84rem}
+.search input:focus{background:#fff;border-color:#2d7a3e}
+.search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8a7d5a;font-size:.85rem}
+.icon{width:36px;height:36px;display:grid;place-items:center;border:1px solid #e6dfb8;border-radius:10px;background:#fff;color:#1f2a1f;text-decoration:none}
+.cart{position:relative}.badge{position:absolute;top:-6px;right:-6px;background:#2d7a3e;color:#fff;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;font-size:.65rem;font-weight:800}
+.burger{display:none;width:36px;height:36px;border:0;border-radius:10px;background:#1f2a1f;color:#fff}
+.mob{display:none;position:fixed;top:84px;left:12px;right:12px;background:#fffcf2;border:1px solid #e6dfb8;border-radius:16px;padding:12px;z-index:9998;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.mob.active{display:block}
+.mob a{display:block;padding:10px;border-radius:10px;text-decoration:none;color:#1f2a1f;font-weight:700}
+.mob a:hover{background:#f5efe0}
+@media(max-width:980px){.nav,.search{display:none}.burger{display:grid;place-items:center}body{padding-top:60px}.hdr{top:0}.top{display:none}}
+</style></head><body>
+<div class="top"><div>🌾 Direktang galing Biñan, Laguna • Araw-araw na ani</div><div><a href="my_orders.php">My Orders</a><a href="notifications.php">Notifications</a><?php if($is_logged){?><span>Hi, <?=htmlspecialchars($_SESSION['user_name']??'User')?></span><a href="logout.php">Logout</a><?php }else{?><a href="login.php">Login</a><?php }?></div></div>
+<div class="hdr"><div class="hdr-inner">
+  <a href="index.php" class="logo"><div class="logo-box">BUKID<br>2BAYAN</div><div class="logo-text hide">FROM BUKID<br>TO BAYAN</div></a>
+  <?php if(!$hide_categories){?><nav class="nav"><a href="products.php?cat=fruits" class="<?=strpos($current_page,'fruits')!==false?'on':''?>">Fruits</a><a href="products.php?cat=vegetables">Veggies</a><a href="products.php?cat=essentials">Essentials</a><a href="products.php">All Products</a></nav><?php }else{?><div></div><?php }?>
+  <div class="right">
+    <div class="search"><i class="fas fa-search"></i><input placeholder="Search gulay..." onkeydown="if(event.key==='Enter') location='products.php?q='+this.value"></div>
+    <a href="cart.php" class="icon cart"><i class="fas fa-shopping-cart"></i><?php if($cart_count>0){?><span class="badge"><?=$cart_count?></span><?php }?></a>
+    <a href="<?=$is_logged?'profile.php':'login.php'?>" class="icon"><i class="far fa-user"></i></a>
+    <button class="burger" id="burger"><i class="fas fa-bars"></i></button>
   </div>
-</div>
-<?php include 'footer.php'; ?>
+</div></div>
+<div class="mob" id="mobileMenu"><a href="products.php?cat=fruits">Fruits</a><a href="products.php?cat=vegetables">Veggies</a><a href="products.php">All Products</a><a href="my_orders.php">My Orders</a><a href="cart.php">Cart (<?=$cart_count?>)</a><?php if($is_farmer){?><a href="farmer_dashboard.php">Farmer Dashboard</a><?php }?></div>
+<script>document.getElementById('burger').onclick=e=>{e.stopPropagation();document.getElementById('mobileMenu').classList.toggle('active')};document.addEventListener('click',e=>{if(!e.target.closest('#mobileMenu')&&!e.target.closest('#burger'))document.getElementById('mobileMenu').classList.remove('active')});</script>
+<main style="background:#fdf8ec">
