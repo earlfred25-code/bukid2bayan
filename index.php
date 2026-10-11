@@ -12,17 +12,8 @@ include 'header.php'; $is_pdo=$conn instanceof PDO;
   position:relative;
   overflow:hidden;
 }
-.landing-wrap::before{
-  content:'';position:absolute;top:-120px;right:-120px;width:380px;height:380px;
-  background:radial-gradient(circle,rgba(45,122,62,0.13) 0%,transparent 70%);border-radius:50%;
-}
-.landing-wrap::after{
-  content:'';position:absolute;bottom:-80px;left:-80px;width:420px;height:420px;
-  background:radial-gradient(circle,rgba(240,192,64,0.18) 0%,transparent 70%);border-radius:50%;
-}
 .hero{max-width:1280px;margin:0 auto;padding:36px 20px;display:grid;grid-template-columns:1.15fr .85fr;gap:22px;align-items:start;position:relative;z-index:1}
 @media(max-width:900px){.hero{grid-template-columns:1fr;padding:18px 14px}}
-
 .hero-left{
   background:#fdfaf0;
   border:1.5px solid #c8c190;
@@ -47,13 +38,11 @@ include 'header.php'; $is_pdo=$conn instanceof PDO;
 .hero h1 span{color:#2d7a3e}
 .hero p{color:#5a5540;max-width:480px;line-height:1.55;font-size:.95rem}
 .btns{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
-.btn{padding:12px 20px;border-radius:26px;font-weight:800;text-decoration:none;font-size:.88rem;transition:.2s}
-.btn-black{background:#1f2a1f;color:#fff;box-shadow:0 4px 12px rgba(31,42,31,.25)}.btn-black:hover{transform:translateY(-1px);background:#000}
-.btn-white{background:#fdfaf0;border:1.5px solid #2d7a3e;color:#1f2a1f}.btn-white:hover{background:#fff}
+.btn{padding:12px 20px;border-radius:26px;font-weight:800;text-decoration:none;font-size:.88rem}
+.btn-black{background:#1f2a1f;color:#fff;box-shadow:0 4px 12px rgba(31,42,31,.25)}
+.btn-white{background:#fdfaf0;border:1.5px solid #2d7a3e;color:#1f2a1f}
 .pills{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
-.pills a{border:1.5px solid #d9cf9a;background:#fffdf0;padding:6px 13px;border-radius:20px;text-decoration:none;color:#3a3a2a;font-weight:700;font-size:.78rem;transition:.2s}
-.pills a:hover{background:#2d7a3e;color:#fff;border-color:#2d7a3e}
-
+.pills a{border:1.5px solid #d9cf9a;background:#fffdf0;padding:6px 13px;border-radius:20px;text-decoration:none;color:#3a3a2a;font-weight:700;font-size:.78rem}
 .card-right{
   background:#fdfaf0;
   border:1.5px solid #c8c190;
@@ -68,14 +57,11 @@ include 'header.php'; $is_pdo=$conn instanceof PDO;
   border:1px solid #d9cf9a;
   margin-bottom:12px;
 }
-.item{border:1.5px solid #e6dfb8;background:#fffdf0;border-radius:14px;padding:11px 12px;display:flex;gap:10px;align-items:center;margin-bottom:10px;transition:.2s}
-.item:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(0,0,0,.05)}
+.item{border:1.5px solid #e6dfb8;background:#fffdf0;border-radius:14px;padding:11px 12px;display:flex;gap:10px;align-items:center;margin-bottom:10px}
 .item.green{background:#eaf5dc;border-color:#a8cfa0}
 .item.dark{background:#2d7a3e;color:#fff;border-color:#2d7a3e}
 .item.dark small{color:#c8e9c8}
-
-.suki{max-width:1280px;margin:22px auto 0;padding:20px 20px;background:#fdfaf0;border:1.5px solid #c8c190;border-radius:22px;box-shadow:0 12px 30px rgba(90,70,10,.08);position:relative;z-index:1}
-.suki h2{letter-spacing:-.5px}
+.suki{max-width:1280px;margin:22px auto 0;padding:20px 20px;background:#fdfaf0;border:1.5px solid #c8c190;border-radius:22px;box-shadow:0 12px 30px rgba(90,70,10,.08)}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 @media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr)}}@media(min-width:1100px){.grid{grid-template-columns:repeat(6,1fr)}}
 .prod{border:1.5px solid #e6dfb8;background:#fffdf0;border-radius:16px;padding:10px;text-align:center;transition:.2s}
@@ -94,11 +80,10 @@ include 'header.php'; $is_pdo=$conn instanceof PDO;
       <div style="margin-top:12px;font-size:.78rem;color:#6b6450;font-weight:700">Cash on Delivery | Same-day harvest | No middleman</div>
       <div class="pills"><a href="products.php?cat=fruits">Fruits</a><a href="products.php?cat=vegetables">Veggies</a><a href="products.php?cat=essentials">Essentials</a><a href="products.php">Best Sellers</a></div>
     </div>
-    <img class="side-img" src="https://images.unsplash.com/photo-1608198093002-ad4e005484ec?q=80&w=600&auto=format&fit=crop" alt="Baguio vegetables Philippines">
+    <img class="side-img" src="https://images.unsplash.com/photo-1597362925123-77861d3fbac7?q=80&w=600&auto=format&fit=crop" alt="Sariwang gulay Pilipinas palengke">
   </div>
-
   <div class="card-right">
-    <img class="top-img" src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=800&auto=format&fit=crop" alt="Philippine farm field sunrise Laguna">
+    <img class="top-img" src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?q=80&w=800&auto=format&fit=crop" alt="Bukid ng gulay sa Laguna Pilipinas">
     <div style="font-weight:800;color:#1f2a1f">Ano meron ngayon?</div><small style="color:#6b6450">Bagong pitas ngayong umaga</small>
     <div style="margin-top:12px">
       <div class="item green"><div style="width:32px;height:32px;background:#fff;display:grid;place-items:center;border-radius:8px;font-weight:800;color:#2d7a3e">50+</div><div><b>klase ng gulay</b><br><small>Diretso sa bukid</small></div></div>
