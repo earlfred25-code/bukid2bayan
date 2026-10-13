@@ -1,5 +1,5 @@
 <?php
-// VERCEL SAFE - GREEN HEADER BAGAY SA FARMER THEME
+
 if (ob_get_level() == 0) ob_start();
 if (session_status() == PHP_SESSION_NONE) {
     @ini_set('session.save_path', sys_get_temp_dir());
@@ -66,7 +66,7 @@ $hide_categories=in_array($current_page,['login.php','register.php']);
     <div class="search-box"><input id="s" placeholder="Maghanap ng gulay, prutas..." onkeydown="if(event.key==='Enter') location='products.php?q='+this.value"><button onclick="location='products.php?q='+document.getElementById('s').value"><i class="fas fa-search"></i></button></div>
     <div class="icons"><a href="profile.php" class="ic"><i class="far fa-user"></i></a><a href="cart.php" class="ic"><i class="fas fa-shopping-cart"></i><?php if($cart_count>0){?><span class="badge"><?=$cart_count?></span><?php }?></a><button class="burger" id="burger"><i class="fas fa-bars"></i></button></div>
   </div>
-  <?php if(!$hide_categories){?><nav class="bot-nav"><a href="products.php?cat=fruits" class="active">🍎 Fruits</a><a href="products.php?cat=vegetables">🥬 Veggies</a><a href="products.php?cat=essentials">🧺 Essentials</a><a href="products.php">All Products</a><a href="products.php?q=best">🔥 Best Sellers</a><?php if($is_farmer){?><a href="farmer_dashboard.php" style="background:#fff;color:#2d7a3e">🌾 Farmer Dashboard</a><?php }?></nav><?php }?>
+  <?php if(!$hide_categories){?><nav class="bot-nav"><a href="products.php?cat=fruits" class="active">Fruits</a><a href="products.php?cat=vegetables">Veggies</a><a href="products.php?cat=essentials">Essentials</a><a href="products.php">All Products</a><a href="products.php?q=best">Best Sellers</a><?php if($is_farmer){?><a href="farmer_dashboard.php" style="background:#fff;color:#2d7a3e">Farmer Dashboard</a><?php }?></nav><?php }?>
 </header>
 <div class="mob" id="mob"><a href="products.php?cat=fruits">Fruits</a><a href="products.php?cat=vegetables">Veggies</a><a href="products.php">All Products</a><a href="cart.php">Cart (<?=$cart_count?>)</a></div>
 <script>document.getElementById('burger').onclick=e=>{e.stopPropagation();document.getElementById('mob').classList.toggle('active')};document.addEventListener('click',e=>{if(!e.target.closest('#mob')&&!e.target.closest('#burger'))document.getElementById('mob').classList.remove('active')});</script>
