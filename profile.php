@@ -1,149 +1,116 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
-include __DIR__.'/db_connect.php';
-
-if (!isset($_SESSION['user_id']) && isset($_COOKIE['user_id'])) {
-    try{
-        $is_tmp = $conn instanceof PDO;
-        $uid_cookie = (int)$_COOKIE['user_id'];
-        if($is_tmp){
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
-            $st->execute([$uid_cookie]);
-            $u = $st->fetch(PDO::FETCH_ASSOC);
-        } else {
-            $st = $conn->prepare("SELECT id, username, role, is_admin FROM users WHERE id =? LIMIT 1");
-            $st->bind_param("i", $uid_cookie);
-            $st->execute();
-            $u = $st->get_result()->fetch_assoc();
-        }
-        if($u){
-            $_SESSION['user_id'] = $u['id'];
-            $_SESSION['user_name'] = $u['username'];
-            $_SESSION['role'] = $u['role']?? 'buyer';
-            $_SESSION['is_admin'] = $u['is_admin']?? 0;
-        }
-    }catch(Exception $e){}
-}
-
-if(!isset($_SESSION['user_id']) &&!isset($_COOKIE['user_id'])){
-    header("Location: login.php");
-    exit();
-}
+include __DIR__.'/../db_connect.php';
 
 $is_pdo = $conn instanceof PDO;
-$uid = (int)($_SESSION['user_id']?? $_COOKIE['user_id']?? 0);
-$user = null;
-$db_error = null;
 
-try{
-    if($is_pdo){
-        $stmt = $conn->prepare("SELECT id, username, email, role, phone_number, is_verified, is_admin, google_id, created_at FROM users WHERE id =? LIMIT 1");
-        $stmt->execute([$uid]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    } else {
-        $stmt = $conn->prepare("SELECT id, username, email, role, phone_number, is_verified, is_admin, google_id, created_at FROM users WHERE id =? LIMIT 1");
-        $stmt->bind_param("i", $uid);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        $user = $res->fetch_assoc();
-        $stmt->close();
-    }
-}catch(Exception $e){
-    $db_error = $e->getMessage();
+function find_image($w){
+  if(empty($w)) return 'https://via.placeholder.com/300?text=Gulay';
+  $w = trim($w);
+  $base = basename($w);
+  $check1 = __DIR__.'/../images/'.$base;
+  $check2 = __DIR__.'/../images/'.$w;
+  $check3 = __DIR__.'/images/'.$base;
+  if(file_exists($check1)) return '../images/'.$base;
+  if(file_exists($check2)) return '../images/'.$w;
+  if(file_exists($check3)) return 'images/'.$base;
+  if(str_starts_with($w, '/images/')) return '..'.$w;
+  if(str_starts_with($w, 'images/')) return '../'.$w;
+  return '../images/'.$base;
 }
+
+include __DIR__.'/../header.php';
+
+$cat = $_GET['cat'] ?? '';
+$where = "WHERE LOWER(name) NOT LIKE '%fish%' AND LOWER(name) NOT LIKE '%meat%' AND LOWER(name) NOT LIKE '%pork%' AND LOWER(name) NOT LIKE '%beef%' AND LOWER(name) NOT LIKE '%chicken%'";
+if($cat){
+  $cat = strtolower($cat);
+  if($is_pdo){
+    $where .= " AND LOWER(category) = ".$conn->quote($cat)."";
+  } else {
+    $where .= " AND LOWER(category) = '".$conn->real_escape_string($cat)."'";
+  }
+}
+$sql = "SELECT id, name, price, stock, image_url, category FROM products $where ORDER BY id DESC";
+
+$products = [];
+if($is_pdo){ $stmt=$conn->query($sql); $products=$stmt->fetchAll(PDO::FETCH_ASSOC); }
+else { $res=$conn->query($sql); if($res) while($r=$res->fetch_assoc()) $products[]=$r; }
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My Account - Bukid2Bayan</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body class="bg-[#f5f5f5] min-h-screen">
-<?php include __DIR__.'/header.php';?>
-<div class="max-w- mx-auto px-4 py-6 flex gap-6">
-    <div class="w- hidden md:block shrink-0">
-        <div class="flex gap-3 items-center py-4 border-b border-black/5">
-            <div class="w-12 h-12 rounded-full bg-[#2d7a3e] text-white flex items-center justify-center font-black text-lg">
-                <?= strtoupper(substr($user['username']?? 'U',0,1))?>
-            </div>
-            <div class="leading-tight">
-                <div class="font-bold text-sm truncate w-"><?= htmlspecialchars($user['username']?? 'User')?></div>
-                <div class="text-xs text-black/50"><i class="fas fa-pen text-"></i> Edit Profile</div>
-            </div>
+<style>
+.landing-wrap{background:linear-gradient(180deg,#e7f3d0 0%,#f6f1dc 42%,#fdf6d0 100%);min-height:100vh;padding-bottom:30px}
+.head-bar{max-width:1280px;margin:0 auto 18px;background:#fdfaf0;border:1.5px solid #c8c190;border-radius:22px;padding:18px 20px;box-shadow:0 12px 30px rgba(90,70,10,.08);text-align:center}
+.head-bar h1{margin:0;font-size:1.7rem;font-weight:900;color:#1f2a1f;letter-spacing:-.5px}
+.head-bar p{margin:4px 0 0;color:#6b6450;font-weight:700;font-size:.85rem}
+.grid-wrap{max-width:1280px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+@media(min-width:700px){.grid-wrap{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1100px){.grid-wrap{grid-template-columns:repeat(4,1fr)}}
+.prod-card{background:#fdfaf0;border:1.5px solid #c8c190;border-radius:22px;padding:12px;box-shadow:0 12px 30px rgba(90,70,10,.08);transition:.2s;display:flex;flex-direction:column}
+.prod-card:hover{transform:translateY(-4px);border-color:#2d7a3e}
+.prod-card .img-box{width:100%;height:170px;background:#fffdf0;border:1px solid #e6dfb8;border-radius:14px;overflow:hidden;display:grid;place-items:center}
+.prod-card .img-box img{width:100%;height:100%;object-fit:contain}
+.prod-card h3{margin:10px 0 2px;font-size:.95rem;font-weight:900;color:#1f2a1f;text-transform:capitalize}
+.meta{font-size:.78rem;color:#2d7a3e;font-weight:700;display:flex;gap:4px;align-items:center}
+.price{font-weight:900;color:#1f2a1f;margin-top:4px}
+.price span{font-weight:700;color:#6b6450;font-size:.8rem}
+.qty-box{margin-top:10px;background:#fffdf0;border:1.5px solid #e6dfb8;border-radius:12px;padding:6px 8px;display:flex;align-items:center;justify-content:space-between}
+.qty-btn{width:28px;height:28px;border-radius:8px;border:1.5px solid #c8c190;background:#fdfaf0;font-weight:900;cursor:pointer}
+.qty-input{width:42px;text-align:center;border:1.5px solid #2d7a3e;border-radius:8px;padding:4px 0;font-weight:800;background:#fff}
+.actions{display:flex;gap:8px;margin-top:10px}
+.btn-add{flex:1;border:1.5px solid #2d7a3e;background:#fffdf0;color:#2d7a3e;padding:8px 0;border-radius:12px;font-weight:800;font-size:.8rem;cursor:pointer}
+.btn-buy{flex:1;background:#2d7a3e;color:#fff;border:1.5px solid #2d7a3e;padding:8px 0;border-radius:12px;font-weight:800;font-size:.8rem;cursor:pointer}
+.btn-add:hover{background:#eaf5dc}.btn-buy:hover{background:#1f4d22}
+</style>
+
+<div class="landing-wrap">
+  <div class="head-bar">
+    <h1>All Products</h1>
+    <p>Fresh from farmers - <?= count($products) ?> items available • Sariwa mula Binan</p>
+  </div>
+
+  <div class="grid-wrap">
+  <?php foreach($products as $p):
+    $img = find_image($p['image_url'] ?? $p['name'].'.jpg');
+    $price = number_format((float)($p['price'] ?? 0),2);
+    $stock = (int)($p['stock'] ?? 10);
+  ?>
+    <div class="prod-card">
+      <div class="img-box">
+        <img src="<?= htmlspecialchars($img) ?>" alt="<?= htmlspecialchars($p['name']) ?>" onerror="this.src='https://via.placeholder.com/300?text=<?= urlencode($p['name']) ?>'">
+      </div>
+      <h3><?= htmlspecialchars($p['name']) ?></h3>
+      <div class="meta">from <?= $stock ?></div>
+      <div class="price">₱<?= $price ?> <span>/ kg</span></div>
+      
+      <div class="qty-box">
+        <span style="font-size:.78rem;font-weight:700;color:#5a5540">Dami:</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="qty-btn" onclick="this.nextElementSibling.value=Math.max(1,parseInt(this.nextElementSibling.value)-1)">-</button>
+          <input class="qty-input" type="text" value="1" id="qty-<?= $p['id'] ?>">
+          <button class="qty-btn" onclick="this.previousElementSibling.value=parseInt(this.previousElementSibling.value)+1">+</button>
         </div>
-        <div class="mt-6 space-y-6 text-sm">
-            <div>
-                <div class="flex items-center gap-2 font-bold"><i class="far fa-user text-blue-500"></i> My Account</div>
-                <div class="ml-7 mt-2 space-y-2 text- text-black/70">
-                    <div class="text-[#2d7a3e] font-semibold">Profile</div>
-                    <a href="#" class="block hover:text-[#2d7a3e]">Banks & Cards</a>
-                    <a href="#" class="block hover:text-[#2d7a3e]">Addresses</a>
-                    <a href="#" class="block hover:text-[#2d7a3e]">Change Password</a>
-                </div>
-            </div>
-            <a href="my_orders.php" class="flex items-center gap-2 hover:text-[#2d7a3e]"><i class="fas fa-receipt text-blue-400"></i> My Purchase</a>
-            <a href="notifications.php" class="flex items-center gap-2 hover:text-[#2d7a3e]"><i class="far fa-bell text-orange-400"></i> Notifications</a>
-            <a href="farmer_centre.php" class="flex items-center gap-2 hover:text-[#2d7a3e]"><i class="fas fa-store text-green-500"></i> Farmer Centre</a>
-        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-add" onclick="addCart(<?= $p['id'] ?>)">Add</button>
+        <button class="btn-buy" onclick="buyNow(<?= $p['id'] ?>)">Buy Now</button>
+      </div>
     </div>
-    <div class="flex-1 bg-white rounded-sm shadow-sm">
-        <div class="p-6 border-b">
-            <div class="text- font-medium">My Profile</div>
-            <div class="text- text-black/60 mt-1">Manage and protect your account</div>
-        </div>
-        <?php if(isset($db_error)):?>
-            <div class="m-6 bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm"><?= htmlspecialchars($db_error)?></div>
-        <?php endif;?>
-        <?php if(!$user):?>
-            <div class="p-6">Walang nahanap na user. Session ID: <?= htmlspecialchars($_SESSION['user_id']?? $_COOKIE['user_id']?? '')?></div>
-        <?php else:?>
-        <div class="p-6 flex flex-col lg:flex-row gap-8">
-            <div class="flex-1">
-                <div class="space-y-6">
-                    <div class="flex items-center">
-                        <div class="w- text-right pr-6 text-sm text-black/60">Username</div>
-                        <div class="flex-1 text-sm font-medium"><?= htmlspecialchars($user['username'])?></div>
-                    </div>
-                    <div class="flex items-center">
-                        <div class="w- text-right pr-6 text-sm text-black/60">Pangalan</div>
-                        <div class="flex-1"><input value="<?= htmlspecialchars($user['username'])?>" class="w-full max-w- border border-black/10 rounded-sm px-3 py-2 text-sm outline-none focus:border-black/20"></div>
-                    </div>
-                    <div class="flex items-center">
-                        <div class="w- text-right pr-6 text-sm text-black/60">Email</div>
-                        <div class="flex-1 flex items-center gap-3">
-                            <div class="text-sm"><?= htmlspecialchars($user['email'])?></div>
-                            <?php if(!empty($user['is_verified'])):?><span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded"><i class="fas fa-check"></i> Verified</span><?php endif;?>
-                        </div>
-                    </div>
-                    <div class="flex items-center">
-                        <div class="w- text-right pr-6 text-sm text-black/60">Phone</div>
-                        <div class="flex-1 text-sm"><?= htmlspecialchars($user['phone_number']?? 'Wala pa')?></div>
-                    </div>
-                    <div class="flex items-center">
-                        <div class="w- text-right pr-6 text-sm text-black/60">Role</div>
-                        <div class="flex-1"><span class="bg-[#f5f7f5] border px-3 py-1 rounded-full text-xs capitalize"><?= htmlspecialchars($user['role']?? 'buyer')?></span></div>
-                    </div>
-                    <div class="flex items-center pt-4">
-                        <div class="w-"></div>
-                        <button class="bg-[#2d7a3e] hover:bg-[#236332] text-white px-6 py-2 rounded-sm text-sm">Save</button>
-                    </div>
-                </div>
-            </div>
-            <div class="w-full lg:w- border-t lg:border-t-0 lg:border-l border-black/5 flex flex-col items-center pt-6">
-                <div class="w-24 h-24 rounded-full bg-gray-100 border flex items-center justify-center text-3xl font-black text-[#2d7a3e]">
-                    <?= strtoupper(substr($user['username']?? 'U',0,1))?>
-                </div>
-                <button class="mt-4 border border-black/10 px-6 py-1.5 text-sm rounded-sm hover:bg-black/5">Select Image</button>
-                <div class="text-xs text-black/40 mt-3 text-center px-6 leading-4">File size max 1MB<br>Format: JPEG, PNG</div>
-                <a href="logout.php" class="mt-8 w-full bg-[#ee4d2d] hover:bg-[#d73211] text-white py-2 rounded-sm text-sm text-center">Logout</a>
-            </div>
-        </div>
-        <?php endif;?>
-    </div>
+  <?php endforeach; ?>
+  </div>
 </div>
-<?php include __DIR__.'/footer.php';?>
-</body>
-</html>
+
+<script>
+function addCart(id){
+  let qty = document.getElementById('qty-'+id)?.value || 1;
+  fetch('cart_handler.php', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'action=add&id='+id+'&qty='+qty})
+  .then(r=>r.text()).then(()=>{ alert('Na-add sa cart!'); });
+}
+function buyNow(id){
+  let qty = document.getElementById('qty-'+id)?.value || 1;
+  window.location.href = 'checkout.php?buy='+id+'&qty='+qty;
+}
+</script>
+
+<?php include __DIR__.'/../footer.php'; ?>
