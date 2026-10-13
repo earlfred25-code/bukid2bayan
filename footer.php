@@ -85,7 +85,7 @@
             <div class="footer-col">
                 <h3 class="footer-logo">BUKID2BAYAN</h3>
                 <p>Bridging the gap between dedicated farmers and conscious consumers with fresh, direct-trade produce from Bukid to Bayan.</p>
-                <p style="margin-top:12px; font-size:0.85rem; color:#a5d6a7;">🌱 Fresh • 🚚 Fast • 🤝 Direct</p>
+                <p style="margin-top:12px; font-size:0.85rem; color:#a5d6a7;">Fresh • Fast • Direct</p>
             </div>
             <div class="footer-col">
                 <h4>Quick Links</h4>
